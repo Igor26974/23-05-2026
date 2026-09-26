@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BLE VA Meter</title>
-    <!-- Библиотека для графиков SmoothieCharts -->
     <script src="https://cloudflare.com"></script>
     <style>
         body { font-family: sans-serif; background: #121212; color: #e0e0e0; text-align: center; margin: 0; padding: 20px; }
@@ -46,6 +45,7 @@
 </div>
 
 <script>
+// ВАЖНО: Эти UUID должны строго совпадать с прошивкой ESP32
 const SERVICE_UUID = "4fafc201-1fb5-459e-8fcc-c5c9c331914b";
 const CHARACTERISTIC_UUID = "beb5483e-36e1-4688-b7f5-ea07361b26a8";
 
@@ -67,19 +67,21 @@ smoothie.addTimeSeries(lineCurrent, { strokeStyle:'rgba(77, 166, 255, 1)', fillS
 
 document.getElementById('connectBtn').addEventListener('click', async () => {
     try {
-        document.getElementById('status').innerText = "Статус: Поиск устройства...";
+        document.getElementById('status').innerText = "Статус: Вызов окна Bluetooth...";
         
+        // Измененный метод запроса: открывает список ВСЕХ устройств, как на тестовом сайте
         bleDevice = await navigator.bluetooth.requestDevice({
-            filters: [{ services: [SERVICE_UUID] }]
+            acceptAllDevices: true,
+            optionalServices: [SERVICE_UUID]
         });
 
-        document.getElementById('status').innerText = "Статус: Подключение...";
+        document.getElementById('status').innerText = "Статус: Подключение к " + bleDevice.name + "...";
         const server = await bleDevice.gatt.connect();
 
         document.getElementById('status').innerText = "Статус: Поиск сервиса...";
         const service = await server.getPrimaryService(SERVICE_UUID);
 
-        document.getElementById('status').innerText = "Статус: Получение данных...";
+        document.getElementById('status').innerText = "Статус: Получение характеристики...";
         dataCharacteristic = await service.getCharacteristic(CHARACTERISTIC_UUID);
 
         await dataCharacteristic.startNotifications();
@@ -102,6 +104,7 @@ document.getElementById('connectBtn').addEventListener('click', async () => {
 function handleData(event) {
     const value = event.target.value;
     
+    // Чтение структуры из 12 байт
     const v_now = value.getInt16(0, true) / 100.0;
     const v_min = value.getInt16(2, true) / 100.0;
     const v_max = value.getInt16(4, true) / 100.0;

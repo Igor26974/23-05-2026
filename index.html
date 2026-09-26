@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BLE VA Монитор с Графиком</title>
+    <title>BLE VA Монитор с Автоподключением</title>
     <!-- Подключаем SmoothieCharts для плавного графика -->
     <script src="https://cloudflare.com"></script>
     <style>
@@ -15,7 +15,7 @@
         .param span { font-weight: bold; color: #00adb5; }
         .chart-container { max-width: 540px; margin: 0 auto; background: #1a1a1a; padding: 10px; border-radius: 10px; border: 1px solid #333; }
         canvas { width: 100%; height: 220px; display: block; }
-        #log { margin-top: 20px; color: #888; font-family: monospace; font-size: 14px; text-align: center; }
+        #log { margin-top: 20px; color: #aaa; font-family: monospace; font-size: 14px; text-align: center; }
     </style>
 </head>
 <body>
@@ -36,64 +36,94 @@
         <canvas id="vaChart"></canvas>
     </div>
 
-    <div id="log">Статус: Ожидание подключения...</div>
+    <div id="log">Статус: Проверка разрешений...</div>
 
 <script>
 const SERVICE_UUID = "4fafc201-1fb5-459e-8fcc-c5c9c331914b";
 const CHARACTERISTIC_UUID = "beb5483e-36e1-4688-b7f5-ea07361b26a8";
 
-// Настройка холста SmoothieChart
+let bleDevice = null;
+let dataCharacteristic = null;
+
+// Настройка холста SmoothieChart (исправлены параметры автоподстройки шкал)
 const smoothie = new SmoothieChart({
     grid: { strokeStyle: '#2c2c2c', fillStyle: '#1a1a1a', lineWidth: 1, millisPerLine: 1000, verticalSections: 6 },
-    labels: { fillStyle: '#ffffff', precision: 3 },
-    tooltip: true,
-    maxValueScale: 1.1,
-    minValueScale: 1.1
+    labels: { fillStyle: '#ffffff', precision: 2 },
+    tooltip: true
 });
 
-// Создаем две независимые временные линии данных
 const lineVoltage = new TimeSeries();
 const lineCurrent = new TimeSeries();
 
-// Добавляем линии на график с разным цветом
-// Красная линия — Напряжение, Синяя — Ток
 smoothie.addTimeSeries(lineVoltage, { strokeStyle: 'rgba(255, 77, 77, 1)', fillStyle: 'rgba(255, 77, 77, 0.05)', lineWidth: 2 });
 smoothie.addTimeSeries(lineCurrent, { strokeStyle: 'rgba(77, 166, 255, 1)', fillStyle: 'rgba(77, 166, 255, 0.05)', lineWidth: 2 });
 
-// Привязываем график к canvas элементу с задержкой отрисовки 500 мс для идеальной плавности
 smoothie.streamTo(document.getElementById('vaChart'), 500);
 
+// Функция инициализации связи с характеристикой
+function setupCharacteristic(characteristic) {
+    dataCharacteristic = characteristic;
+    return dataCharacteristic.startNotifications().then(() => {
+        dataCharacteristic.addEventListener('characteristicvaluechanged', handleIncomingData);
+        document.getElementById('log').innerText = "Связь установлена! Поток запущен.";
+        document.getElementById('connectBtn').style.display = 'none';
+    });
+}
+
+// Функция подключения к GATT-серверу устройства
+function connectToDevice(device) {
+    bleDevice = device;
+    document.getElementById('log').innerText = "Подключение к " + (bleDevice.name || "ESP32") + "...";
+    
+    bleDevice.addEventListener('gattserverdisconnected', () => {
+        document.getElementById('log').innerText = "Статус: Соединение разорвано";
+        document.getElementById('connectBtn').style.display = 'inline-block';
+    });
+
+    return bleDevice.gatt.connect()
+        .then(server => server.getPrimaryService(SERVICE_UUID))
+        .then(service => service.getCharacteristic(CHARACTERISTIC_UUID))
+        .then(characteristic => setupCharacteristic(characteristic))
+        .catch(error => {
+            document.getElementById('log').innerText = "Не удалось подключиться: " + error.message;
+            document.getElementById('connectBtn').style.display = 'inline-block';
+        });
+}
+
+// Ручное подключение через кнопку (с вызовом системного окна)
 document.getElementById('connectBtn').addEventListener('click', function() {
-    document.getElementById('log').innerText = "Запрос устройства...";
+    document.getElementById('log').innerText = "Вызов окна Bluetooth...";
 
     navigator.bluetooth.requestDevice({
         acceptAllDevices: true,
         optionalServices: [SERVICE_UUID]
     })
-    .then(device => {
-        document.getElementById('log').innerText = "Подключение к GATT серверу...";
-        return device.gatt.connect();
-    })
-    .then(server => {
-        document.getElementById('log').innerText = "Поиск сервиса...";
-        return server.getPrimaryService(SERVICE_UUID);
-    })
-    .then(service => {
-        document.getElementById('log').innerText = "Получение характеристики...";
-        return service.getCharacteristic(CHARACTERISTIC_UUID);
-    })
-    .then(characteristic => {
-        document.getElementById('log').innerText = "Включение уведомлений...";
-        return characteristic.startNotifications().then(() => {
-            characteristic.addEventListener('characteristicvaluechanged', handleIncomingData);
-            document.getElementById('log').innerText = "Связь установлена! Поток запущен.";
-            document.getElementById('connectBtn').style.display = 'none';
-        });
-    })
+    .then(device => connectToDevice(device))
     .catch(error => {
-        document.getElementById('log').innerText = "Ошибка: " + error.message;
-        console.error(error);
+        document.getElementById('log').innerText = "Ошибка окна: " + error.message;
     });
+});
+
+// Автоматическое подключение при загрузке страницы (без вызова окна)
+window.addEventListener('DOMContentLoaded', () => {
+    if (navigator.bluetooth && navigator.bluetooth.getDevices) {
+        document.getElementById('log').innerText = "Попытка автоподключения...";
+        navigator.bluetooth.getDevices()
+            .then(devices => {
+                if (devices.length > 0) {
+                    // Если нашли ранее сопряженное устройство, берем первое
+                    document.getElementById('log').innerText = "Найдено сохраненное устройство. Подключаюсь...";
+                    connectToDevice(devices[0]);
+                } else {
+                    document.getElementById('log').innerText = "Статус: Ожидание ручного подключения...";
+                }
+            })
+            .catch(error => {
+                document.getElementById('log').innerText = "Статус: Ожидание подключения...";
+            });
+    } else {
+        document.getElementById('log').innerText = "Статус: Ожидание подключения (Автоподключение не поддерживается)...";
+    }
 });
 
 function handleIncomingData(event) {
@@ -108,7 +138,6 @@ function handleIncomingData(event) {
         const i_min = buffer.getInt16(8, true) / 1000.0;
         const i_max = buffer.getInt16(10, true) / 1000.0;
 
-        // Обновляем цифры в карточках
         document.getElementById('vNow').innerText = v_now.toFixed(2);
         document.getElementById('vMin').innerText = v_min.toFixed(2);
         document.getElementById('vMax').innerText = v_max.toFixed(2);
@@ -117,7 +146,6 @@ function handleIncomingData(event) {
         document.getElementById('iMin').innerText = i_min.toFixed(3);
         document.getElementById('iMax').innerText = i_max.toFixed(3);
 
-        // Добавляем новые точки на бегущий график
         const timestamp = new Date().getTime();
         lineVoltage.append(timestamp, v_now);
         lineCurrent.append(timestamp, i_now);

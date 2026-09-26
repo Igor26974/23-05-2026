@@ -6,14 +6,21 @@
     <title>Чистый BLE VA Монитор</title>
     <style>
         body { font-family: sans-serif; background: #121212; color: #fff; text-align: center; padding: 20px; margin: 0; }
-        .container { max-width: 500px; margin: 0 auto; padding: 10px; }
-        button { background: #00adb5; color: white; border: none; padding: 15px 30px; font-size: 18px; border-radius: 8px; cursor: pointer; font-weight: bold; margin-bottom: 20px; width: 100%; box-sizing: border-box; }
-        button:hover { background: #007a80; }
+        .container { max-width: 540px; margin: 0 auto; padding: 10px; }
+        button { color: white; border: none; padding: 15px 30px; font-size: 18px; border-radius: 8px; cursor: pointer; font-weight: bold; margin-bottom: 20px; width: 100%; box-sizing: border-box; transition: background 0.3s; }
+        .btn-connect { background: #00adb5; }
+        .btn-connect:hover { background: #007a80; }
+        .btn-disconnect { background: #ff4d4d; }
+        .btn-disconnect:hover { background: #cc3333; }
         .monitor { background: #1e1e1e; padding: 15px; border-radius: 10px; border: 1px solid #333; text-align: left; margin-bottom: 15px; }
         .param { font-size: 18px; margin: 8px 0; font-family: monospace; }
         .param span { font-weight: bold; color: #00adb5; }
-        .chart-container { background: #1a1a1a; padding: 5px; border-radius: 10px; border: 1px solid #333; position: relative; }
+        .chart-wrapper { position: relative; background: #1a1a1a; padding: 20px 45px 30px 45px; border-radius: 10px; border: 1px solid #333; box-sizing: border-box; }
         canvas { width: 100%; height: 200px; display: block; background: #151515; border-radius: 6px; }
+        .axis-label { position: absolute; font-family: monospace; font-size: 11px; font-weight: bold; }
+        .axis-v { left: 8px; color: #ff4d4d; text-align: right; width: 32px; }
+        .axis-i { right: 8px; color: #4da6ff; text-align: left; width: 38px; }
+        .axis-t { bottom: 8px; color: #888; font-size: 10px; width: 60px; text-align: center; }
         #log { margin-top: 15px; color: #888; font-family: monospace; font-size: 13px; }
     </style>
 </head>
@@ -22,7 +29,7 @@
 <div class="container">
     <h2>BLE VA-Монитор (Встроенный граф)</h2>
     
-    <button id="connectBtn">ПОДКЛЮЧИТЬСЯ И ВКЛЮЧИТЬ ГРАФИК</button>
+    <button id="actionBtn" class="btn-connect">ПОДКЛЮЧИТЬСЯ И ВКЛЮЧИТЬ ГРАФИК</button>
 
     <div class="monitor">
         <div class="param">Напряжение: <span id="vNow">0.00</span> В</div>
@@ -32,8 +39,29 @@
         <div class="param">I Мин: <span id="iMin">0.000</span> | I Макс: <span id="iMax">0.000</span></div>
     </div>
 
-    <div class="chart-container">
+    <div class="chart-wrapper">
+        <!-- Левая шкала (Вольты) -->
+        <div class="axis-label axis-v" style="top: 20px;">15.0В</div>
+        <div class="axis-label axis-v" style="top: 70px;">13.7В</div>
+        <div class="axis-label axis-v" style="top: 120px;">12.5В</div>
+        <div class="axis-label axis-v" style="top: 170px;">11.2В</div>
+        <div class="axis-label axis-v" style="top: 210px;">10.0В</div>
+
         <canvas id="customChart" width="500" height="200"></canvas>
+
+        <!-- Правая шкала (Амперы) -->
+        <div class="axis-label axis-i" style="top: 20px;">5.00А</div>
+        <div class="axis-label axis-i" style="top: 70px;">3.75А</div>
+        <div class="axis-label axis-i" style="top: 120px;">2.50А</div>
+        <div class="axis-label axis-i" style="top: 170px;">1.25А</div>
+        <div class="axis-label axis-i" style="top: 210px;">0.00А</div>
+
+        <!-- Нижняя шкала времени (бегущие секунды относительно старта) -->
+        <div id="t-4" class="axis-label axis-t" style="left: 45px;">-4.0s</div>
+        <div id="t-3" class="axis-label axis-t" style="left: 155px;">-3.0s</div>
+        <div id="t-2" class="axis-label axis-t" style="left: 265px;">-2.0s</div>
+        <div id="t-1" class="axis-label axis-t" style="left: 375px;">-1.0s</div>
+        <div id="t-0" class="axis-label axis-t" style="right: 45px; color: #00adb5;">0.0s</div>
     </div>
 
     <div id="log">Статус: Ожидание подключения...</div>
@@ -43,18 +71,21 @@
 const SERVICE_UUID = "4fafc201-1fb5-459e-8fcc-c5c9c331914b";
 const CHARACTERISTIC_UUID = "beb5483e-36e1-4688-b7f5-ea07361b26a8";
 
-// Настройка нашего собственного легкого осциллографа
+let bleDevice = null;
+let dataCharacteristic = null;
+let isConnected = false;
+
 const canvas = document.getElementById('customChart');
 const ctx = canvas.getContext('2d');
-const maxPoints = 50; // Сколько точек одновременно помещается на экране
+const maxPoints = 50; 
 const voltageHistory = [];
 const currentHistory = [];
+let secondsElapsed = 0.0;
 
-// Функция очистки и отрисовки сетки графика
 function drawChart() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    // Рисуем сетку
+    // Сетка графика
     ctx.strokeStyle = '#262626';
     ctx.lineWidth = 1;
     for (let i = 40; i < canvas.height; i += 40) {
@@ -64,60 +95,87 @@ function drawChart() {
         ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, canvas.height); ctx.stroke();
     }
 
-    // Отрисовка линии Напряжения (Красная)
+    // Красная линия (Напряжение) 10В - 15В
     if (voltageHistory.length > 1) {
         ctx.strokeStyle = '#ff4d4d'; ctx.lineWidth = 2; ctx.beginPath();
         for (let i = 0; i < voltageHistory.length; i++) {
             const x = (i / (maxPoints - 1)) * canvas.width;
-            // Автомасштабирование под диапазон 10В - 15В (для авто)
-            const y = canvas.height - ((voltageHistory[i] - 10) / 5) * canvas.height;
+            let v = voltageHistory[i];
+            if(v < 10) v = 10; if(v > 15) v = 15;
+            const y = canvas.height - ((v - 10) / 5) * canvas.height;
             if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
         }
         ctx.stroke();
     }
 
-    // Отрисовка линии Тока (Синяя)
+    // Синяя линия (Ток) 0А - 5А
     if (currentHistory.length > 1) {
         ctx.strokeStyle = '#4da6ff'; ctx.lineWidth = 2; ctx.beginPath();
         for (let i = 0; i < currentHistory.length; i++) {
             const x = (i / (maxPoints - 1)) * canvas.width;
-            // Автомасштабирование под диапазон 0А - 5А
-            const y = canvas.height - (currentHistory[i] / 5) * canvas.height;
+            let cap_i = currentHistory[i];
+            if(cap_i < 0) cap_i = 0; if(cap_i > 5) cap_i = 5;
+            const y = canvas.height - (cap_i / 5) * canvas.height;
             if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
         }
         ctx.stroke();
     }
 }
 
-// Первичная отрисовка пустой сетки
 drawChart();
 
-document.getElementById('connectBtn').addEventListener('click', function() {
-    document.getElementById('log').innerText = "Запрос устройства...";
-
-    // Тот самый 100% рабочий, чистый вызов без асинхронных задержек библиотек
-    navigator.bluetooth.requestDevice({
-        acceptAllDevices: true,
-        optionalServices: [SERVICE_UUID]
-    })
-    .then(device => {
-        document.getElementById('log').innerText = "Подключение к GATT...";
-        return device.gatt.connect();
-    })
-    .then(server => server.getPrimaryService(SERVICE_UUID))
-    .then(service => service.getCharacteristic(CHARACTERISTIC_UUID))
-    .then(characteristic => {
-        return characteristic.startNotifications().then(() => {
-            characteristic.addEventListener('characteristicvaluechanged', handleIncomingData);
-            document.getElementById('log').innerText = "Связь установлена! Поток запущен.";
-            document.getElementById('connectBtn').style.display = 'none';
+// Логика переключения кнопки Подключить / Отключить
+document.getElementById('actionBtn').addEventListener('click', function() {
+    if (!isConnected) {
+        // Логика подключения
+        document.getElementById('log').innerText = "Запрос устройства...";
+        navigator.bluetooth.requestDevice({
+            acceptAllDevices: true,
+            optionalServices: [SERVICE_UUID]
+        })
+        .then(device => {
+            bleDevice = device;
+            document.getElementById('log').innerText = "Подключение к GATT...";
+            bleDevice.addEventListener('gattserverdisconnected', onDisconnected);
+            return bleDevice.gatt.connect();
+        })
+        .then(server => server.getPrimaryService(SERVICE_UUID))
+        .then(service => service.getCharacteristic(CHARACTERISTIC_UUID))
+        .then(characteristic => {
+            dataCharacteristic = characteristic;
+            return dataCharacteristic.startNotifications().then(() => {
+                dataCharacteristic.addEventListener('characteristicvaluechanged', handleIncomingData);
+                
+                // Переключаем кнопку в режим ОТКЛЮЧЕНИЯ
+                isConnected = true;
+                const btn = document.getElementById('actionBtn');
+                btn.innerText = "ОТКЛЮЧИТЬ BLE VA МОНИТОР";
+                btn.className = "btn-disconnect";
+                document.getElementById('log').innerText = "Связь установлена! Поток запущен.";
+            });
+        })
+        .catch(error => {
+            document.getElementById('log').innerText = "Ошибка: " + error.message;
+            console.error(error);
         });
-    })
-    .catch(error => {
-        document.getElementById('log').innerText = "Ошибка: " + error.message;
-        console.error(error);
-    });
+    } else {
+        // Логика ручного отключения
+        if (bleDevice && bleDevice.gatt.connected) {
+            bleDevice.gatt.disconnect();
+        }
+    }
 });
+
+function onDisconnected() {
+    isConnected = false;
+    const btn = document.getElementById('actionBtn');
+    btn.innerText = "ПОДКЛЮЧИТЬСЯ И ВКЛЮЧИТЬ ГРАФИК";
+    btn.className = "btn-connect";
+    document.getElementById('log').innerText = "Статус: Соединение разорвано платой или пользователем.";
+    voltageHistory.length = 0;
+    currentHistory.length = 0;
+    drawChart();
+}
 
 function handleIncomingData(event) {
     const buffer = event.target.value;
@@ -139,15 +197,20 @@ function handleIncomingData(event) {
         document.getElementById('iMin').innerText = i_min.toFixed(3);
         document.getElementById('iMax').innerText = i_max.toFixed(3);
 
-        // Добавляем данные в массивы истории
         voltageHistory.push(v_now);
         currentHistory.push(i_now);
 
-        // Сдвигаем график влево при заполнении
         if (voltageHistory.length > maxPoints) voltageHistory.shift();
         if (currentHistory.length > maxPoints) currentHistory.shift();
 
-        // Перерисовываем холст
+        // Динамическое обновление бегущей шкалы времени по оси X (пакеты идут раз в 100мс)
+        secondsElapsed += 0.1;
+        document.getElementById('t-4').innerText = (secondsElapsed - 4.0).toFixed(1) + "s";
+        document.getElementById('t-3').innerText = (secondsElapsed - 3.0).toFixed(1) + "s";
+        document.getElementById('t-2').innerText = (secondsElapsed - 2.0).toFixed(1) + "s";
+        document.getElementById('t-1').innerText = (secondsElapsed - 1.0).toFixed(1) + "s";
+        document.getElementById('t-0').innerText = secondsElapsed.toFixed(1) + "s";
+
         drawChart();
     }
 }

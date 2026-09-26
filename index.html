@@ -3,37 +3,99 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Тест BLE</title>
+    <title>Тест BLE Данных</title>
     <style>
-        body { font-family: sans-serif; background: #121212; color: #fff; text-align: center; padding-top: 50px; }
-        button { background: #00adb5; color: white; border: none; padding: 20px 40px; font-size: 20px; border-radius: 8px; cursor: pointer; font-weight: bold; }
+        body { font-family: sans-serif; background: #121212; color: #fff; text-align: center; padding: 20px; }
+        button { background: #00adb5; color: white; border: none; padding: 15px 30px; font-size: 18px; border-radius: 8px; cursor: pointer; font-weight: bold; margin-bottom: 20px; }
         button:hover { background: #007a80; }
-        #log { margin-top: 30px; color: #888; font-family: monospace; }
+        .monitor { max-width: 400px; margin: 0 auto; background: #1e1e1e; padding: 20px; border-radius: 10px; border: 1px solid #333; text-align: left; }
+        .param { font-size: 20px; margin: 10px 0; font-family: monospace; }
+        .param span { font-weight: bold; color: #00adb5; }
+        #log { margin-top: 20px; color: #888; font-family: monospace; font-size: 14px; text-align: center; }
     </style>
 </head>
 <body>
 
-    <h2>Тест вызова окна Bluetooth</h2>
-    <br><br>
-    <button id="testBtn">ОТКРЫТЬ ОКНО BLUETOOTH</button>
-    <div id="log">Ожидание нажатия...</div>
+    <h2>Прием данных с ESP32-C3</h2>
+    
+    <button id="connectBtn">ПОДКЛЮЧИТЬСЯ И ЧИТАТЬ</button>
+
+    <div class="monitor">
+        <div class="param">Напряжение: <span id="vNow">0.00</span> В</div>
+        <div class="param">V Мин: <span id="vMin">0.00</span> | V Макс: <span id="vMax">0.00</span></div>
+        <hr style="border-color: #333;">
+        <div class="param">Ток: <span id="iNow">0.000</span> А</div>
+        <div class="param">I Мин: <span id="iMin">0.000</span> | I Макс: <span id="iMax">0.000</span></div>
+    </div>
+
+    <div id="log">Статус: Ожидание подключения...</div>
 
 <script>
-document.getElementById('testBtn').addEventListener('click', function() {
-    document.getElementById('log').innerText = "Кнопка нажата. Запрашиваю устройство...";
+// Эти UUID строго соответствуют прошивке в вашей ESP32-C3
+const SERVICE_UUID = "4fafc201-1fb5-459e-8fcc-c5c9c331914b";
+const CHARACTERISTIC_UUID = "beb5483e-36e1-4688-b7f5-ea07361b26a8";
 
-    // Самый прямой и примитивный вызов без фильтров и асинхронных задержек
+document.getElementById('connectBtn').addEventListener('click', function() {
+    document.getElementById('log').innerText = "Запрос устройства...";
+
+    // Используем тот самый успешный метод открытия окна
     navigator.bluetooth.requestDevice({
-        acceptAllDevices: true
+        acceptAllDevices: true,
+        optionalServices: [SERVICE_UUID]
     })
     .then(device => {
-        document.getElementById('log').innerText = "Устройство выбрано: " + device.name;
+        document.getElementById('log').innerText = "Подключение к GATT серверу...";
+        return device.gatt.connect();
+    })
+    .then(server => {
+        document.getElementById('log').innerText = "Поиск сервиса...";
+        return server.getPrimaryService(SERVICE_UUID);
+    })
+    .then(service => {
+        document.getElementById('log').innerText = "Получение характеристики...";
+        return service.getCharacteristic(CHARACTERISTIC_UUID);
+    })
+    .then(characteristic => {
+        document.getElementById('log').innerText = "Включение уведомлений (Notifications)...";
+        // Включаем прием потока данных от ESP32
+        return characteristic.startNotifications().then(() => {
+            characteristic.addEventListener('characteristicvaluechanged', handleIncomingData);
+            document.getElementById('log').innerText = "Связь установлена! Получаем данные...";
+            document.getElementById('connectBtn').style.display = 'none';
+        });
     })
     .catch(error => {
-        document.getElementById('log').innerText = "Ошибка или отмена: " + error.message;
+        document.getElementById('log').innerText = "Ошибка: " + error.message;
         console.error(error);
     });
 });
+
+// Функция, которая срабатывает каждые 100 мс при приходе пакета от ESP32
+function handleIncomingData(event) {
+    const buffer = event.target.value; // Получаем сырые байты (DataView)
+    
+    // Проверяем, что пришло именно 12 байт, как настроено в структуре пакета ESP32
+    if (buffer.byteLength >= 12) {
+        // Извлекаем 6 чисел типа Int16 (по 2 байта каждое). 
+        // true означает Little Endian (младший байт вперед — стандарт для ESP)
+        const v_now = buffer.getInt16(0, true) / 100.0;
+        const v_min = buffer.getInt16(2, true) / 100.0;
+        const v_max = buffer.getInt16(4, true) / 100.0;
+        
+        const i_now = buffer.getInt16(6, true) / 1000.0;
+        const i_min = buffer.getInt16(8, true) / 1000.0;
+        const i_max = buffer.getInt16(10, true) / 1000.0;
+
+        // Выводим полученные значения в наши текстовые поля на странице
+        document.getElementById('vNow').innerText = v_now.toFixed(2);
+        document.getElementById('vMin').innerText = v_min.toFixed(2);
+        document.getElementById('vMax').innerText = v_max.toFixed(2);
+
+        document.getElementById('iNow').innerText = i_now.toFixed(3);
+        document.getElementById('iMin').innerText = i_min.toFixed(3);
+        document.getElementById('iMax').innerText = i_max.toFixed(3);
+    }
+}
 </script>
 
 </body>

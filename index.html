@@ -60,7 +60,6 @@
 
     <div id="log">Статус: Ожидание подключения...</div>
 </div>
-
 <script>
 const SERVICE_UUID = "4fafc201-1fb5-459e-8fcc-c5c9c331914b";
 const CHARACTERISTIC_UUID = "beb5483e-36e1-4688-b7f5-ea07361b26a8";
@@ -89,22 +88,20 @@ function drawChart() {
     }
 
     // 1. Вычисляем пределы для НАПРЯЖЕНИЯ (Красный)
-    let minV = 11.0, maxV = 14.0; // Базовые значения по умолчанию
+    let minV = 11.0, maxV = 14.0;
     if (voltageHistory.length > 0) {
         let actualMin = Math.min(...voltageHistory);
         let actualMax = Math.max(...voltageHistory);
         let delta = actualMax - actualMin;
-        if (delta < 0.2) delta = 0.5; // Чтобы шкала не схлопывалась при покое
-        minV = actualMin - (delta * 0.1); // 10% запас снизу
-        maxV = actualMax + (delta * 0.1); // 10% запас сверху
+        if (delta < 0.2) delta = 0.5;
+        minV = actualMin - (delta * 0.1);
+        maxV = actualMax + (delta * 0.1);
     }
     
-    // Обновляем текстовые метки напряжения на экране
     document.getElementById('v-max-lbl').innerText = maxV.toFixed(1) + "В";
     document.getElementById('v-mid-lbl').innerText = ((maxV + minV) / 2).toFixed(1) + "В";
     document.getElementById('v-min-lbl').innerText = minV.toFixed(1) + "В";
 
-    // Отрисовка линии напряжения
     if (voltageHistory.length > 1) {
         ctx.strokeStyle = '#ff4d4d'; ctx.lineWidth = 2; ctx.beginPath();
         for (let i = 0; i < voltageHistory.length; i++) {
@@ -116,22 +113,20 @@ function drawChart() {
     }
 
     // 2. Вычисляем пределы для ТОКА (Синий)
-    let minI = 0.0, maxI = 3.0; // Базовые значения по умолчанию
+    let minI = 0.0, maxI = 3.0;
     if (currentHistory.length > 0) {
         let actualMin = Math.min(...currentHistory);
         let actualMax = Math.max(...currentHistory);
         let delta = actualMax - actualMin;
         if (delta < 0.1) delta = 0.2; 
-        minI = actualMin - (delta * 0.1); if (minI < 0) minI = 0; // Ток автомобиля обычно не отрицательный
-        maxI = actualMax + (delta * 0.1); // 10% запас сверху
+        minI = actualMin - (delta * 0.1); if (minI < 0) minI = 0;
+        maxI = actualMax + (delta * 0.1);
     }
 
-    // Обновляем текстовые метки тока на экране
     document.getElementById('i-max-lbl').innerText = maxI.toFixed(2) + "А";
     document.getElementById('i-mid-lbl').innerText = ((maxI + minI) / 2).toFixed(2) + "А";
     document.getElementById('i-min-lbl').innerText = minI.toFixed(2) + "А";
 
-    // Отрисовка линии тока
     if (currentHistory.length > 1) {
         ctx.strokeStyle = '#4da6ff'; ctx.lineWidth = 2; ctx.beginPath();
         for (let i = 0; i < currentHistory.length; i++) {
@@ -143,7 +138,6 @@ function drawChart() {
     }
 }
 
-// Стартовая отрисовка пустой сетки
 drawChart();
 
 document.getElementById('actionBtn').addEventListener('click', function() {
@@ -215,3 +209,47 @@ function handleIncomingData(event) {
         document.getElementById('iMax').innerText = i_max.toFixed(3);
 
         voltageHistory.push(v_now);
+        currentHistory.push(i_now);
+
+        if (voltageHistory.length > maxPoints) voltageHistory.shift();
+        if (currentHistory.length > maxPoints) currentHistory.shift();
+
+        secondsElapsed += 0.1;
+        document.getElementById('t-4').innerText = (secondsElapsed - 4.0).toFixed(1) + "s";
+        document.getElementById('t-2').innerText = (secondsElapsed - 2.0).toFixed(1) + "s";
+        document.getElementById('t-0').innerText = secondsElapsed.toFixed(1) + "s";
+
+        drawChart();
+    }
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+    if (location.protocol === 'https:' && navigator.bluetooth && navigator.bluetooth.getDevices) {
+        navigator.bluetooth.getDevices()
+            .then(devices => {
+                if (devices.length > 0 && !isConnected) {
+                    document.getElementById('log').innerText = "Найдено сопряженное устройство. Подключаюсь...";
+                    let savedDevice = devices[0];
+                    bleDevice = savedDevice;
+                    bleDevice.addEventListener('gattserverdisconnected', onDisconnected);
+                    return bleDevice.gatt.connect()
+                        .then(server => server.getPrimaryService(SERVICE_UUID))
+                        .then(service => service.getCharacteristic(CHARACTERISTIC_UUID))
+                        .then(characteristic => {
+                            dataCharacteristic = characteristic;
+                            return dataCharacteristic.startNotifications().then(() => {
+                                dataCharacteristic.addEventListener('characteristicvaluechanged', handleIncomingData);
+                                isConnected = true;
+                                const btn = document.getElementById('actionBtn');
+                                btn.innerText = "ОТКЛЮЧИТЬ BLE VA МОНИТОР";
+                                btn.className = "btn-disconnect";
+                                document.getElementById('log').innerText = "Автоподключение успешно! Поток запущен.";
+                            });
+                        });
+                }
+            }).catch(e => console.log("Автоподключение недоступно в текущем контексте."));
+    }
+});
+</script>
+</body>
+</html>

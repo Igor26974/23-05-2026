@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Чистый BLE VA Монитор</title>
+    <title>BLE VA Монитор - Автомасштаб</title>
     <style>
         body { font-family: sans-serif; background: #121212; color: #fff; text-align: center; padding: 20px; margin: 0; }
-        .container { max-width: 540px; margin: 0 auto; padding: 10px; }
+        .container { max-width: 560px; margin: 0 auto; padding: 10px; }
         button { color: white; border: none; padding: 15px 30px; font-size: 18px; border-radius: 8px; cursor: pointer; font-weight: bold; margin-bottom: 20px; width: 100%; box-sizing: border-box; transition: background 0.3s; }
         .btn-connect { background: #00adb5; }
         .btn-connect:hover { background: #007a80; }
@@ -15,11 +15,11 @@
         .monitor { background: #1e1e1e; padding: 15px; border-radius: 10px; border: 1px solid #333; text-align: left; margin-bottom: 15px; }
         .param { font-size: 18px; margin: 8px 0; font-family: monospace; }
         .param span { font-weight: bold; color: #00adb5; }
-        .chart-wrapper { position: relative; background: #1a1a1a; padding: 20px 45px 30px 45px; border-radius: 10px; border: 1px solid #333; box-sizing: border-box; }
+        .chart-wrapper { position: relative; background: #1a1a1a; padding: 20px 55px 30px 55px; border-radius: 10px; border: 1px solid #333; box-sizing: border-box; }
         canvas { width: 100%; height: 200px; display: block; background: #151515; border-radius: 6px; }
         .axis-label { position: absolute; font-family: monospace; font-size: 11px; font-weight: bold; }
-        .axis-v { left: 8px; color: #ff4d4d; text-align: right; width: 32px; }
-        .axis-i { right: 8px; color: #4da6ff; text-align: left; width: 38px; }
+        .axis-v { left: 8px; color: #ff4d4d; text-align: right; width: 42px; }
+        .axis-i { right: 8px; color: #4da6ff; text-align: left; width: 45px; }
         .axis-t { bottom: 8px; color: #888; font-size: 10px; width: 60px; text-align: center; }
         #log { margin-top: 15px; color: #888; font-family: monospace; font-size: 13px; }
     </style>
@@ -27,7 +27,7 @@
 <body>
 
 <div class="container">
-    <h2>BLE VA-Монитор (Встроенный граф)</h2>
+    <h2>BLE VA-Монитор (Автомасштаб)</h2>
     
     <button id="actionBtn" class="btn-connect">ПОДКЛЮЧИТЬСЯ И ВКЛЮЧИТЬ ГРАФИК</button>
 
@@ -40,28 +40,22 @@
     </div>
 
     <div class="chart-wrapper">
-        <!-- Левая шкала (Вольты) -->
-        <div class="axis-label axis-v" style="top: 20px;">15.0В</div>
-        <div class="axis-label axis-v" style="top: 70px;">13.7В</div>
-        <div class="axis-label axis-v" style="top: 120px;">12.5В</div>
-        <div class="axis-label axis-v" style="top: 170px;">11.2В</div>
-        <div class="axis-label axis-v" style="top: 210px;">10.0В</div>
+        <!-- Динамические маркеры левой шкалы напряжения (V) -->
+        <div id="v-max-lbl" class="axis-label axis-v" style="top: 20px;">15.0В</div>
+        <div id="v-mid-lbl" class="axis-label axis-v" style="top: 120px;">12.5В</div>
+        <div id="v-min-lbl" class="axis-label axis-v" style="top: 210px;">10.0В</div>
 
         <canvas id="customChart" width="500" height="200"></canvas>
 
-        <!-- Правая шкала (Амперы) -->
-        <div class="axis-label axis-i" style="top: 20px;">5.00А</div>
-        <div class="axis-label axis-i" style="top: 70px;">3.75А</div>
-        <div class="axis-label axis-i" style="top: 120px;">2.50А</div>
-        <div class="axis-label axis-i" style="top: 170px;">1.25А</div>
-        <div class="axis-label axis-i" style="top: 210px;">0.00А</div>
+        <!-- Динамические маркеры правой шкалы тока (A) -->
+        <div id="i-max-lbl" class="axis-label axis-i" style="top: 20px;">5.00А</div>
+        <div id="i-mid-lbl" class="axis-label axis-i" style="top: 120px;">2.50А</div>
+        <div id="i-min-lbl" class="axis-label axis-i" style="top: 210px;">0.00А</div>
 
-        <!-- Нижняя шкала времени (бегущие секунды относительно старта) -->
-        <div id="t-4" class="axis-label axis-t" style="left: 45px;">-4.0s</div>
-        <div id="t-3" class="axis-label axis-t" style="left: 155px;">-3.0s</div>
-        <div id="t-2" class="axis-label axis-t" style="left: 265px;">-2.0s</div>
-        <div id="t-1" class="axis-label axis-t" style="left: 375px;">-1.0s</div>
-        <div id="t-0" class="axis-label axis-t" style="right: 45px; color: #00adb5;">0.0s</div>
+        <!-- Нижняя шкала времени -->
+        <div id="t-4" class="axis-label axis-t" style="left: 55px;">-4.0s</div>
+        <div id="t-2" class="axis-label axis-t" style="left: 245px;">-2.0s</div>
+        <div id="t-0" class="axis-label axis-t" style="right: 55px; color: #00adb5;">0.0s</div>
     </div>
 
     <div id="log">Статус: Ожидание подключения...</div>
@@ -85,9 +79,8 @@ let secondsElapsed = 0.0;
 function drawChart() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    // Сетка графика
-    ctx.strokeStyle = '#262626';
-    ctx.lineWidth = 1;
+    // Рисуем сетку графика
+    ctx.strokeStyle = '#262626'; ctx.lineWidth = 1;
     for (let i = 40; i < canvas.height; i += 40) {
         ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(canvas.width, i); ctx.stroke();
     }
@@ -95,39 +88,66 @@ function drawChart() {
         ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, canvas.height); ctx.stroke();
     }
 
-    // Красная линия (Напряжение) 10В - 15В
+    // 1. Вычисляем пределы для НАПРЯЖЕНИЯ (Красный)
+    let minV = 11.0, maxV = 14.0; // Базовые значения по умолчанию
+    if (voltageHistory.length > 0) {
+        let actualMin = Math.min(...voltageHistory);
+        let actualMax = Math.max(...voltageHistory);
+        let delta = actualMax - actualMin;
+        if (delta < 0.2) delta = 0.5; // Чтобы шкала не схлопывалась при покое
+        minV = actualMin - (delta * 0.1); // 10% запас снизу
+        maxV = actualMax + (delta * 0.1); // 10% запас сверху
+    }
+    
+    // Обновляем текстовые метки напряжения на экране
+    document.getElementById('v-max-lbl').innerText = maxV.toFixed(1) + "В";
+    document.getElementById('v-mid-lbl').innerText = ((maxV + minV) / 2).toFixed(1) + "В";
+    document.getElementById('v-min-lbl').innerText = minV.toFixed(1) + "В";
+
+    // Отрисовка линии напряжения
     if (voltageHistory.length > 1) {
         ctx.strokeStyle = '#ff4d4d'; ctx.lineWidth = 2; ctx.beginPath();
         for (let i = 0; i < voltageHistory.length; i++) {
             const x = (i / (maxPoints - 1)) * canvas.width;
-            let v = voltageHistory[i];
-            if(v < 10) v = 10; if(v > 15) v = 15;
-            const y = canvas.height - ((v - 10) / 5) * canvas.height;
+            const y = canvas.height - ((voltageHistory[i] - minV) / (maxV - minV)) * canvas.height;
             if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
         }
         ctx.stroke();
     }
 
-    // Синяя линия (Ток) 0А - 5А
+    // 2. Вычисляем пределы для ТОКА (Синий)
+    let minI = 0.0, maxI = 3.0; // Базовые значения по умолчанию
+    if (currentHistory.length > 0) {
+        let actualMin = Math.min(...currentHistory);
+        let actualMax = Math.max(...currentHistory);
+        let delta = actualMax - actualMin;
+        if (delta < 0.1) delta = 0.2; 
+        minI = actualMin - (delta * 0.1); if (minI < 0) minI = 0; // Ток автомобиля обычно не отрицательный
+        maxI = actualMax + (delta * 0.1); // 10% запас сверху
+    }
+
+    // Обновляем текстовые метки тока на экране
+    document.getElementById('i-max-lbl').innerText = maxI.toFixed(2) + "А";
+    document.getElementById('i-mid-lbl').innerText = ((maxI + minI) / 2).toFixed(2) + "А";
+    document.getElementById('i-min-lbl').innerText = minI.toFixed(2) + "А";
+
+    // Отрисовка линии тока
     if (currentHistory.length > 1) {
         ctx.strokeStyle = '#4da6ff'; ctx.lineWidth = 2; ctx.beginPath();
         for (let i = 0; i < currentHistory.length; i++) {
             const x = (i / (maxPoints - 1)) * canvas.width;
-            let cap_i = currentHistory[i];
-            if(cap_i < 0) cap_i = 0; if(cap_i > 5) cap_i = 5;
-            const y = canvas.height - (cap_i / 5) * canvas.height;
+            const y = canvas.height - ((currentHistory[i] - minI) / (maxI - minI)) * canvas.height;
             if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
         }
         ctx.stroke();
     }
 }
 
+// Стартовая отрисовка пустой сетки
 drawChart();
 
-// Логика переключения кнопки Подключить / Отключить
 document.getElementById('actionBtn').addEventListener('click', function() {
     if (!isConnected) {
-        // Логика подключения
         document.getElementById('log').innerText = "Запрос устройства...";
         navigator.bluetooth.requestDevice({
             acceptAllDevices: true,
@@ -135,7 +155,7 @@ document.getElementById('actionBtn').addEventListener('click', function() {
         })
         .then(device => {
             bleDevice = device;
-            document.getElementById('log').innerText = "Подключение к GATT...";
+            document.getElementById('log').innerText = "Подключение к GATT серверу...";
             bleDevice.addEventListener('gattserverdisconnected', onDisconnected);
             return bleDevice.gatt.connect();
         })
@@ -146,7 +166,6 @@ document.getElementById('actionBtn').addEventListener('click', function() {
             return dataCharacteristic.startNotifications().then(() => {
                 dataCharacteristic.addEventListener('characteristicvaluechanged', handleIncomingData);
                 
-                // Переключаем кнопку в режим ОТКЛЮЧЕНИЯ
                 isConnected = true;
                 const btn = document.getElementById('actionBtn');
                 btn.innerText = "ОТКЛЮЧИТЬ BLE VA МОНИТОР";
@@ -156,10 +175,8 @@ document.getElementById('actionBtn').addEventListener('click', function() {
         })
         .catch(error => {
             document.getElementById('log').innerText = "Ошибка: " + error.message;
-            console.error(error);
         });
     } else {
-        // Логика ручного отключения
         if (bleDevice && bleDevice.gatt.connected) {
             bleDevice.gatt.disconnect();
         }
@@ -171,7 +188,7 @@ function onDisconnected() {
     const btn = document.getElementById('actionBtn');
     btn.innerText = "ПОДКЛЮЧИТЬСЯ И ВКЛЮЧИТЬ ГРАФИК";
     btn.className = "btn-connect";
-    document.getElementById('log').innerText = "Статус: Соединение разорвано платой или пользователем.";
+    document.getElementById('log').innerText = "Статус: Соединение разорвано.";
     voltageHistory.length = 0;
     currentHistory.length = 0;
     drawChart();
@@ -198,23 +215,3 @@ function handleIncomingData(event) {
         document.getElementById('iMax').innerText = i_max.toFixed(3);
 
         voltageHistory.push(v_now);
-        currentHistory.push(i_now);
-
-        if (voltageHistory.length > maxPoints) voltageHistory.shift();
-        if (currentHistory.length > maxPoints) currentHistory.shift();
-
-        // Динамическое обновление бегущей шкалы времени по оси X (пакеты идут раз в 100мс)
-        secondsElapsed += 0.1;
-        document.getElementById('t-4').innerText = (secondsElapsed - 4.0).toFixed(1) + "s";
-        document.getElementById('t-3').innerText = (secondsElapsed - 3.0).toFixed(1) + "s";
-        document.getElementById('t-2').innerText = (secondsElapsed - 2.0).toFixed(1) + "s";
-        document.getElementById('t-1').innerText = (secondsElapsed - 1.0).toFixed(1) + "s";
-        document.getElementById('t-0').innerText = secondsElapsed.toFixed(1) + "s";
-
-        drawChart();
-    }
-}
-</script>
-
-</body>
-</html>

@@ -3,18 +3,25 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BLE VA Монитор - Автомасштаб</title>
+    <title>BLE VA Монитор - Пиковый Осциллограф</title>
     <style>
         body { font-family: sans-serif; background: #121212; color: #fff; text-align: center; padding: 20px; margin: 0; }
         .container { max-width: 560px; margin: 0 auto; padding: 10px; }
-        button { color: white; border: none; padding: 15px 30px; font-size: 18px; border-radius: 8px; cursor: pointer; font-weight: bold; margin-bottom: 20px; width: 100%; box-sizing: border-box; transition: background 0.3s; }
+        button { color: white; border: none; padding: 15px 30px; font-size: 18px; border-radius: 8px; cursor: pointer; font-weight: bold; margin-bottom: 15px; width: 100%; box-sizing: border-box; transition: background 0.3s; }
         .btn-connect { background: #00adb5; }
         .btn-connect:hover { background: #007a80; }
         .btn-disconnect { background: #ff4d4d; }
         .btn-disconnect:hover { background: #cc3333; }
+        .btn-demo { background: #ffa500; color: #121212; display: none; margin-bottom: 20px; }
+        .btn-demo:hover { background: #cc8400; }
         .monitor { background: #1e1e1e; padding: 15px; border-radius: 10px; border: 1px solid #333; text-align: left; margin-bottom: 15px; }
         .param { font-size: 18px; margin: 8px 0; font-family: monospace; }
         .param span { font-weight: bold; color: #00adb5; }
+        
+        .time-scale-wrapper { display: flex; gap: 5px; margin-bottom: 10px; width: 100%; box-sizing: border-box; }
+        .time-scale-wrapper button { padding: 8px; font-size: 14px; margin-bottom: 0; background: #2d2d2d; border: 1px solid #444; }
+        .time-scale-wrapper button.active { background: #00adb5; color: white; border-color: #00adb5; }
+
         .chart-wrapper { position: relative; background: #1a1a1a; padding: 20px 55px 30px 55px; border-radius: 10px; border: 1px solid #333; box-sizing: border-box; }
         canvas { width: 100%; height: 200px; display: block; background: #151515; border-radius: 6px; }
         .axis-label { position: absolute; font-family: monospace; font-size: 11px; font-weight: bold; }
@@ -27,9 +34,10 @@
 <body>
 
 <div class="container">
-    <h2>BLE VA-Монитор (Автомасштаб)</h2>
+    <h2>BLE VA-Монитор (Пиковые Столбики)</h2>
     
     <button id="actionBtn" class="btn-connect">ПОДКЛЮЧИТЬСЯ И ВКЛЮЧИТЬ ГРАФИК</button>
+    <button id="demoBtn" class="btn-demo">ВКЛЮЧИТЬ ДЕМО-РЕЖИМ</button>
 
     <div class="monitor">
         <div class="param">Напряжение: <span id="vNow">0.00</span> В</div>
@@ -39,20 +47,24 @@
         <div class="param">I Мин: <span id="iMin">0.000</span> | I Макс: <span id="iMax">0.000</span></div>
     </div>
 
+    <div class="time-scale-wrapper">
+        <button id="scale-1s" class="active">1 Секунда</button>
+        <button id="scale-10s">10 Секунд</button>
+        <button id="scale-1m">1 Минута</button>
+        <button id="scale-10m">10 Минут</button>
+    </div>
+
     <div class="chart-wrapper">
-        <!-- Динамические маркеры левой шкалы напряжения (V) -->
         <div id="v-max-lbl" class="axis-label axis-v" style="top: 20px;">15.0В</div>
         <div id="v-mid-lbl" class="axis-label axis-v" style="top: 120px;">12.5В</div>
         <div id="v-min-lbl" class="axis-label axis-v" style="top: 210px;">10.0В</div>
 
         <canvas id="customChart" width="500" height="200"></canvas>
 
-        <!-- Динамические маркеры правой шкалы тока (A) -->
         <div id="i-max-lbl" class="axis-label axis-i" style="top: 20px;">5.00А</div>
         <div id="i-mid-lbl" class="axis-label axis-i" style="top: 120px;">2.50А</div>
         <div id="i-min-lbl" class="axis-label axis-i" style="top: 210px;">0.00А</div>
 
-        <!-- Нижняя шкала времени -->
         <div id="t-4" class="axis-label axis-t" style="left: 55px;">-4.0s</div>
         <div id="t-2" class="axis-label axis-t" style="left: 245px;">-2.0s</div>
         <div id="t-0" class="axis-label axis-t" style="right: 55px; color: #00adb5;">0.0s</div>
@@ -67,18 +79,25 @@ const CHARACTERISTIC_UUID = "beb5483e-36e1-4688-b7f5-ea07361b26a8";
 let bleDevice = null;
 let dataCharacteristic = null;
 let isConnected = false;
+let localDemoState = false;
 
 const canvas = document.getElementById('customChart');
 const ctx = canvas.getContext('2d');
-const maxPoints = 50; 
-const voltageHistory = [];
-const currentHistory = [];
+
+let maxPoints = 120; // 120 столбиков по ширине экрана, как на вашем TFT
+let timeDivider = 1; 
+let sampleCounter = 0;
+
+let current_pixel_v_min = 32767, current_pixel_v_max = -32768;
+let current_pixel_i_min = 2000000, current_pixel_i_max = -2000000;
+
+const voltageHistory = []; 
+const currentHistory = []; 
 let secondsElapsed = 0.0;
 
 function drawChart() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    // Рисуем сетку графика
     ctx.strokeStyle = '#262626'; ctx.lineWidth = 1;
     for (let i = 40; i < canvas.height; i += 40) {
         ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(canvas.width, i); ctx.stroke();
@@ -87,58 +106,78 @@ function drawChart() {
         ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, canvas.height); ctx.stroke();
     }
 
-    // 1. Вычисляем пределы для НАПРЯЖЕНИЯ (Красный)
     let minV = 11.0, maxV = 14.0;
     if (voltageHistory.length > 0) {
-        let actualMin = Math.min(...voltageHistory);
-        let actualMax = Math.max(...voltageHistory);
+        let actualMin = Math.min(...voltageHistory.map(d => d.min));
+        let actualMax = Math.max(...voltageHistory.map(d => d.max));
         let delta = actualMax - actualMin;
         if (delta < 0.2) delta = 0.5;
         minV = actualMin - (delta * 0.1);
         maxV = actualMax + (delta * 0.1);
     }
-    
     document.getElementById('v-max-lbl').innerText = maxV.toFixed(1) + "В";
     document.getElementById('v-mid-lbl').innerText = ((maxV + minV) / 2).toFixed(1) + "В";
     document.getElementById('v-min-lbl').innerText = minV.toFixed(1) + "В";
 
-    if (voltageHistory.length > 1) {
-        ctx.strokeStyle = '#ff4d4d'; ctx.lineWidth = 2; ctx.beginPath();
-        for (let i = 0; i < voltageHistory.length; i++) {
-            const x = (i / (maxPoints - 1)) * canvas.width;
-            const y = canvas.height - ((voltageHistory[i] - minV) / (maxV - minV)) * canvas.height;
-            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-        }
-        ctx.stroke();
-    }
-
-    // 2. Вычисляем пределы для ТОКА (Синий)
-    let minI = 0.0, maxI = 3.0;
+    let minI = -1.0, maxI = 5.0;
     if (currentHistory.length > 0) {
-        let actualMin = Math.min(...currentHistory);
-        let actualMax = Math.max(...currentHistory);
+        let actualMin = Math.min(...currentHistory.map(d => d.min));
+        let actualMax = Math.max(...currentHistory.map(d => d.max));
         let delta = actualMax - actualMin;
-        if (delta < 0.1) delta = 0.2; 
-        minI = actualMin - (delta * 0.1); if (minI < 0) minI = 0;
+        if (delta < 0.2) delta = 0.5;
+        minI = actualMin - (delta * 0.1);
         maxI = actualMax + (delta * 0.1);
     }
+    document.getElementById('i-max-lbl').innerText = maxI.toFixed(1) + "А";
+    document.getElementById('i-mid-lbl').innerText = ((maxI + minI) / 2).toFixed(1) + "А";
+    document.getElementById('i-min-lbl').innerText = minI.toFixed(1) + "А";
 
-    document.getElementById('i-max-lbl').innerText = maxI.toFixed(2) + "А";
-    document.getElementById('i-mid-lbl').innerText = ((maxI + minI) / 2).toFixed(2) + "А";
-    document.getElementById('i-min-lbl').innerText = minI.toFixed(2) + "А";
+    ctx.lineWidth = Math.max(1, Math.floor(canvas.width / maxPoints)); 
 
-    if (currentHistory.length > 1) {
-        ctx.strokeStyle = '#4da6ff'; ctx.lineWidth = 2; ctx.beginPath();
-        for (let i = 0; i < currentHistory.length; i++) {
-            const x = (i / (maxPoints - 1)) * canvas.width;
-            const y = canvas.height - ((currentHistory[i] - minI) / (maxI - minI)) * canvas.height;
-            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    for (let i = 0; i < voltageHistory.length; i++) {
+        const x = (i / (maxPoints - 1)) * canvas.width;
+
+        const yVmin = canvas.height - ((voltageHistory[i].min - minV) / (maxV - minV)) * canvas.height;
+        const yVmax = canvas.height - ((voltageHistory[i].max - minV) / (maxV - minV)) * canvas.height;
+        ctx.strokeStyle = '#00ff00';
+        ctx.beginPath(); ctx.moveTo(x, yVmin); ctx.lineTo(x, yVmax); ctx.stroke();
+
+        const yImin = canvas.height - ((currentHistory[i].min - minI) / (maxI - minI)) * canvas.height;
+        const yImax = canvas.height - ((currentHistory[i].max - minI) / (maxI - minI)) * canvas.height;
+        const yZero = canvas.height - ((0 - minI) / (maxI - minI)) * canvas.height;
+
+        if (currentHistory[i].max > 0 && currentHistory[i].min < 0) {
+            ctx.strokeStyle = '#ff3333'; ctx.beginPath(); ctx.moveTo(x, yZero); ctx.lineTo(x, yImax); ctx.stroke();
+            ctx.strokeStyle = '#3399ff'; ctx.beginPath(); ctx.moveTo(x, yZero); ctx.lineTo(x, yImin); ctx.stroke();
+        } else {
+            ctx.strokeStyle = (currentHistory[i].max >= 0) ? '#ff3333' : '#3399ff';
+            ctx.beginPath(); ctx.moveTo(x, yImin); ctx.lineTo(x, yImax); ctx.stroke();
         }
-        ctx.stroke();
     }
 }
-
 drawChart();
+function setScaleActive(id, points, divider, label0, label2, label4) {
+    document.querySelectorAll('.time-scale-wrapper button').forEach(b => b.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    maxPoints = points;
+    timeDivider = divider;
+    sampleCounter = 0;
+    voltageHistory.length = 0;
+    currentHistory.length = 0;
+    
+    current_pixel_v_min = 32767; current_pixel_v_max = -32768;
+    current_pixel_i_min = 2000000; current_pixel_i_max = -2000000;
+
+    document.getElementById('t-0').innerText = label0;
+    document.getElementById('t-2').innerText = label2;
+    document.getElementById('t-4').innerText = label4;
+    drawChart();
+}
+
+document.getElementById('scale-1s').addEventListener('click', () => setScaleActive('scale-1s', 120, 1, '0.0s', '-0.5s', '-1.0s'));
+document.getElementById('scale-10s').addEventListener('click', () => setScaleActive('scale-10s', 120, 5, '0.0s', '-5.0s', '-10.0s'));
+document.getElementById('scale-1m').addEventListener('click', () => setScaleActive('scale-1m', 120, 30, '0s', '-30s', '-60s'));
+document.getElementById('scale-10m').addEventListener('click', () => setScaleActive('scale-10m', 120, 300, '0m', '-5m', '-10m'));
 
 document.getElementById('actionBtn').addEventListener('click', function() {
     if (!isConnected) {
@@ -159,12 +198,12 @@ document.getElementById('actionBtn').addEventListener('click', function() {
             dataCharacteristic = characteristic;
             return dataCharacteristic.startNotifications().then(() => {
                 dataCharacteristic.addEventListener('characteristicvaluechanged', handleIncomingData);
-                
                 isConnected = true;
                 const btn = document.getElementById('actionBtn');
                 btn.innerText = "ОТКЛЮЧИТЬ BLE VA МОНИТОР";
                 btn.className = "btn-disconnect";
                 document.getElementById('log').innerText = "Связь установлена! Поток запущен.";
+                document.getElementById('demoBtn').style.display = 'block';
             });
         })
         .catch(error => {
@@ -177,79 +216,97 @@ document.getElementById('actionBtn').addEventListener('click', function() {
     }
 });
 
+document.getElementById('demoBtn').addEventListener('click', function() {
+    if (dataCharacteristic) {
+        localDemoState = !localDemoState;
+        const cmdBuffer = new Uint8Array([localDemoState ? 1 : 0]);
+        dataCharacteristic.writeValue(cmdBuffer).then(() => {
+            if(localDemoState) {
+                document.getElementById('demoBtn').innerText = "ВЫКЛЮЧИТЬ ДЕМО-РЕЖИМ";
+                document.getElementById('demoBtn').style.background = '#ffcc00';
+            } else {
+                document.getElementById('demoBtn').innerText = "ВКЛЮЧИТЬ ДЕМО-РЕЖИМ";
+                document.getElementById('demoBtn').style.background = '#ffa500';
+            }
+        });
+    }
+});
+
 function onDisconnected() {
     isConnected = false;
     const btn = document.getElementById('actionBtn');
     btn.innerText = "ПОДКЛЮЧИТЬСЯ И ВКЛЮЧИТЬ ГРАФИК";
     btn.className = "btn-connect";
+    document.getElementById('demoBtn').style.display = 'none';
+    localDemoState = false;
+    document.getElementById('demoBtn').innerText = "ВКЛЮЧИТЬ ДЕМО-РЕЖИМ";
+    document.getElementById('demoBtn').style.background = '#ffa500';
     document.getElementById('log').innerText = "Статус: Соединение разорвано.";
     voltageHistory.length = 0;
     currentHistory.length = 0;
+    secondsElapsed = 0.0;
     drawChart();
 }
 
 function handleIncomingData(event) {
     const buffer = event.target.value;
     
+    // ИСПРАВЛЕНО: Читаем строго 12-байтовый стабильный пакет от прошивки v5.8
     if (buffer.byteLength >= 12) {
         const v_now = buffer.getInt16(0, true) / 100.0;
         const v_min = buffer.getInt16(2, true) / 100.0;
         const v_max = buffer.getInt16(4, true) / 100.0;
-        
-        const i_now = buffer.getInt16(6, true) / 1000.0;
-        const i_min = buffer.getInt16(8, true) / 1000.0;
-        const i_max = buffer.getInt16(10, true) / 1000.0;
+
+        const raw_i_now = buffer.getInt16(6, true);
+        const raw_i_min = buffer.getInt16(8, true);
+        const raw_i_max = buffer.getInt16(10, true);
+
+        // Прямой перевод мА в Амперы
+        const i_now = raw_i_now / 1000.0;
+        const i_min = raw_i_min / 1000.0;
+        const i_max = raw_i_max / 1000.0;
 
         document.getElementById('vNow').innerText = v_now.toFixed(2);
         document.getElementById('vMin').innerText = v_min.toFixed(2);
         document.getElementById('vMax').innerText = v_max.toFixed(2);
 
-        document.getElementById('iNow').innerText = i_now.toFixed(3);
-        document.getElementById('iMin').innerText = i_min.toFixed(3);
-        document.getElementById('iMax').innerText = i_max.toFixed(3);
+        let absI = Math.abs(i_now);
+        if (absI >= 100.0) document.getElementById('iNow').innerText = i_now.toFixed(0);
+        else if (absI >= 10.0) document.getElementById('iNow').innerText = i_now.toFixed(1);
+        else document.getElementById('iNow').innerText = i_now.toFixed(3);
 
-        voltageHistory.push(v_now);
-        currentHistory.push(i_now);
+        document.getElementById('iMin').innerText = i_min.toFixed(2);
+        document.getElementById('iMax').innerText = i_max.toFixed(2);
 
-        if (voltageHistory.length > maxPoints) voltageHistory.shift();
-        if (currentHistory.length > maxPoints) currentHistory.shift();
+        // Копим экстремумы для вертикального столбика
+        if (v_min < current_pixel_v_min) current_pixel_v_min = v_min;
+        if (v_max > current_pixel_v_max) current_pixel_v_max = v_max;
+        if (i_min < current_pixel_i_min) current_pixel_i_min = i_min;
+        if (i_max > current_pixel_i_max) current_pixel_i_max = i_max;
 
-        secondsElapsed += 0.1;
-        document.getElementById('t-4').innerText = (secondsElapsed - 4.0).toFixed(1) + "s";
-        document.getElementById('t-2').innerText = (secondsElapsed - 2.0).toFixed(1) + "s";
-        document.getElementById('t-0').innerText = secondsElapsed.toFixed(1) + "s";
+        sampleCounter++;
+        if (sampleCounter >= timeDivider) {
+            sampleCounter = 0;
+            
+            voltageHistory.push({ min: current_pixel_v_min, max: current_pixel_v_max });
+            currentHistory.push({ min: current_pixel_i_min, max: current_pixel_i_max });
 
-        drawChart();
+            if (voltageHistory.length > maxPoints) voltageHistory.shift();
+            if (currentHistory.length > maxPoints) currentHistory.shift();
+
+            current_pixel_v_min = 32767; current_pixel_v_max = -32768;
+            current_pixel_i_min = 2000000; current_pixel_i_max = -2000000;
+
+            if (timeDivider === 1) {
+                secondsElapsed += 0.1;
+                document.getElementById('t-4').innerText = (secondsElapsed - 1.0).toFixed(1) + "s";
+                document.getElementById('t-2').innerText = (secondsElapsed - 0.5).toFixed(1) + "s";
+                document.getElementById('t-0').innerText = secondsElapsed.toFixed(1) + "s";
+            }
+            drawChart();
+        }
     }
 }
-
-window.addEventListener('DOMContentLoaded', () => {
-    if (location.protocol === 'https:' && navigator.bluetooth && navigator.bluetooth.getDevices) {
-        navigator.bluetooth.getDevices()
-            .then(devices => {
-                if (devices.length > 0 && !isConnected) {
-                    document.getElementById('log').innerText = "Найдено сопряженное устройство. Подключаюсь...";
-                    let savedDevice = devices[0];
-                    bleDevice = savedDevice;
-                    bleDevice.addEventListener('gattserverdisconnected', onDisconnected);
-                    return bleDevice.gatt.connect()
-                        .then(server => server.getPrimaryService(SERVICE_UUID))
-                        .then(service => service.getCharacteristic(CHARACTERISTIC_UUID))
-                        .then(characteristic => {
-                            dataCharacteristic = characteristic;
-                            return dataCharacteristic.startNotifications().then(() => {
-                                dataCharacteristic.addEventListener('characteristicvaluechanged', handleIncomingData);
-                                isConnected = true;
-                                const btn = document.getElementById('actionBtn');
-                                btn.innerText = "ОТКЛЮЧИТЬ BLE VA МОНИТОР";
-                                btn.className = "btn-disconnect";
-                                document.getElementById('log').innerText = "Автоподключение успешно! Поток запущен.";
-                            });
-                        });
-                }
-            }).catch(e => console.log("Автоподключение недоступно в текущем контексте."));
-    }
-});
 </script>
 </body>
 </html>

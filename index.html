@@ -63,7 +63,7 @@
       <button id="btnDemo2" class="btn-demo">DEMO 2 (Новое)</button>
 	  <button id="btnPause" onclick="toggleInterfacePause()" style="background: #27272a;">Пауза</button>
       <button id="btnTerm">Лог: СКРЫТ</button>
-      <span class="ver-tag">v291130</span>
+      <span class="ver-tag">v291130-1h</span>
     </div>
   </div>
 
@@ -86,26 +86,28 @@
     <div class="row-btn">
       <span style="font-size:13px; color:#71717a; margin-right:5px; font-weight:600;">Графики на экране:</span>
       <button class="btn-ch" data-id="1s">1 Секунда</button>
-      <button class="btn-ch" data-id="10s">10 Секунд</button>
       <button class="btn-ch" data-id="1m">1 Минута</button>
       <button class="btn-ch" data-id="10m">10 Минут</button>
+      <button class="btn-ch" data-id="1h">1 Час</button>
     </div>
     
     <div id="wrapper-1s" class="chart-wrapper hidden"><canvas id="ch1s"></canvas></div>
-    <div id="wrapper-10s" class="chart-wrapper hidden"><canvas id="ch10s"></canvas></div>
     <div id="wrapper-1m" class="chart-wrapper hidden"><canvas id="ch1m"></canvas></div>
     <div id="wrapper-10m" class="chart-wrapper hidden"><canvas id="ch10m"></canvas></div>
+    <div id="wrapper-1h" class="chart-wrapper hidden"><canvas id="ch1h"></canvas></div>
   </div>
 
   <div id="termBox" class="terminal-box hidden"></div>
 </div>
+
 <script>
 const CONFIG = {
-  "1s":  { size: 100, div: 1,  label: "Осциллограмма 1с (100 точек/сек)" },
-  "10s": { size: 200, div: 5,  label: "Экран 10с (Разрешение 20 Гц)" },
-  "1m":  { size: 300, div: 10, label: "Тренды 1м" },
-  "10m": { size: 300, div: 100, label: "История 10м" }
+  "1s":  { size: 400,  div: 1,   label: "Осциллограмма 1с (400 точек)" },
+  "1m":  { size: 600,  div: 10,  label: "Тренды 1м" },
+  "10m": { size: 600,  div: 100, label: "История 10м" },
+  "1h":  { size: 600,  div: 600, label: "Самописец 1 Час (1 точка / 6 сек)" }
 };
+
 
 class MicroChart {
   constructor(canvasId, cfg) {
@@ -115,68 +117,32 @@ class MicroChart {
     this.data = []; 
     this.tickCounter = 0;
     window.addEventListener('resize', () => this.render());
-	  // Подсказка на паузе. Минимум кода, все скобки проверены:
+
     this.canvas.addEventListener('mousemove', (e) => {
       if (!isInterfacePaused || this.data.length < 2) return;
       const r = this.canvas.getBoundingClientRect();
       const x = e.clientX - r.left;
       if (x < 80 || x > r.width - 80) return;
-      <!-- const idx = Math.round((x - 80) / ((r.width - 160) / (this.cfg.size - 1))); -->
-	  const idx = Math.round(x - 80);
+      const idx = Math.round(x - 80);
       const pt = this.data[idx];
       if (!pt) return;
-      <!-- this.canvas.title = `V: ${pt.vMin.toFixed(2)}..${pt.vMax.toFixed(2)}V\nI: ${pt.iMin.toFixed(3)}..${pt.iMax.toFixed(3)}A`; -->
-	  this.canvas.title = `Pkt: ${pt.pktStr || '?'}\nV: ${pt.vMin.toFixed(2)}..${pt.vMax.toFixed(2)}V\nI: ${pt.iMin.toFixed(3)}..${pt.iMax.toFixed(3)}A`;
-	  
+      this.canvas.title = `Pkt: ${pt.pktStr || '?'}\nV: ${pt.vMin.toFixed(2)}..${pt.vMax.toFixed(2)}V\nI: ${pt.iMin.toFixed(3)}..${pt.iMax.toFixed(3)}A`;
     });
   }
 
-<!-- push(vMin, vMax, iMin, iMax) { -->
-    <!-- // Если аккумуляторы еще не созданы, инициализируем их текущими значениями -->
-    <!-- if (!this.acc) { -->
-      <!-- this.acc = { vMin, vMax, iMin, iMax }; -->
-    <!-- } else { -->
-      <!-- // Накапливаем истинные минимумы и максимумы со ВСЕХ пакетов без исключения -->
-      <!-- if (vMin < this.acc.vMin) this.acc.vMin = vMin; -->
-      <!-- if (vMax > this.acc.vMax) this.acc.vMax = vMax; -->
-      <!-- if (iMin < this.acc.vMin) this.acc.iMin = iMin; -->
-      <!-- if (iMax > this.acc.iMax) this.acc.iMax = iMax; -->
-    <!-- } -->
-
-    <!-- this.tickCounter++; -->
-    <!-- // Переносим данные в основной массив графика только когда накопилось нужное число пакетов (div) -->
-    <!-- if (this.tickCounter % this.cfg.div === 0) { -->
-      <!-- if (this.data.length >= this.cfg.size) this.data.shift(); -->
-      
-      <!-- // Сохраняем накопленные за весь период экстремумы -->
-      <!-- this.data.push({  -->
-        <!-- vMin: this.acc.vMin,  -->
-        <!-- vMax: this.acc.vMax,  -->
-        <!-- iMin: this.acc.iMin,  -->
-        <!-- iMax: this.acc.iMax  -->
-      <!-- }); -->
-      
-      <!-- // Сбрасываем аккумуляторы для следующего цикла накопления -->
-      <!-- this.acc = null; -->
-      <!-- this.render(); -->
-    <!-- } -->
-  <!-- } -->
   push(vMin, vMax, iMin, iMax, pktNum) {
     if (!this.acc) {
-      // Запоминаем номер самого первого пакета в этом цикле накопления
       this.acc = { vMin, vMax, iMin, iMax, pktStart: pktNum, pktEnd: pktNum };
     } else {
       if (vMin < this.acc.vMin) this.acc.vMin = vMin;
       if (vMax > this.acc.vMax) this.acc.vMax = vMax;
       if (iMin < this.acc.iMin) this.acc.iMin = iMin;
       if (iMax > this.acc.iMax) this.acc.iMax = iMax;
-      // Обновляем номер последнего пришедшего пакета
       this.acc.pktEnd = pktNum;
     }
 
     this.tickCounter++;
     if (this.tickCounter % this.cfg.div === 0) {
-      // Защита: если график скрыт, clientWidth равен 0. Задаем минимальную ширину по умолчанию
       let maxPoints = this.canvas.parentElement.clientWidth - 160; 
       if (maxPoints <= 0) maxPoints = this.cfg.size; 
       
@@ -195,11 +161,14 @@ class MicroChart {
     }
   }
   
-  
   render() {
     const w = this.canvas.width = this.canvas.parentElement.clientWidth;
     const h = this.canvas.height = 240;
     const ctx = this.ctx;
+    
+    // Цветовая палитра для Тока (один тон для плюса, один для минуса)
+    const COLOR_LIGHT_RED  = "#f87171"; 
+    const COLOR_LIGHT_BLUE = "#60a5fa"; 
     
     ctx.fillStyle = "#040406"; ctx.fillRect(0,0,w,h);
     
@@ -207,7 +176,7 @@ class MicroChart {
     ctx.strokeStyle = "#16161b"; ctx.lineWidth = 1;
     for(let i=1; i<4; i++) { let y = (h/4)*i; ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke(); }
     
-    // Границы Осей: Левая (Вольты, смещение 80px), Правая (Ток, смещение 80px от правого края)
+    // Границы Осей
     const padL = 80, padR = 80;
     ctx.strokeStyle = "#2d2d34"; 
     ctx.beginPath(); ctx.moveTo(padL, 0); ctx.lineTo(padL, h); ctx.stroke();
@@ -218,7 +187,7 @@ class MicroChart {
 
     if (this.data.length < 2) return;
 
-    // Расчет экстремумов для независимого масштабирования осей
+    // Расчет экстремумов
     let lMinI = Infinity, lMaxI = -Infinity;
     let lMinV = Infinity, lMaxV = -Infinity;
     for (let i = 0; i < this.data.length; i++) {
@@ -230,8 +199,9 @@ class MicroChart {
     if (lMinI === Infinity || lMinI === lMaxI) { lMinI = -1; lMaxI = 1; }
     if (lMinV === Infinity || lMinV === lMaxV) { lMinV = 10; lMaxV = 15; }
 
-    // 1. ОТРИСОВКА ЛИНИИ НАПРЯЖЕНИЯ (Зеленый ступенчатый тренд)
-    ctx.strokeStyle = "#10b981"; ctx.lineWidth = 1.5;
+    // 1. ОТРИСОВКА ЛИНИИ НАПРЯЖЕНИЯ (Зеленая)
+    ctx.strokeStyle = "#FFFF00"; //Yellow   //"#10b981"; 
+	ctx.lineWidth = 1.5;
     ctx.beginPath();
     for (let i = 0; i < this.data.length; i++) {
       const x = padL + i;
@@ -242,81 +212,105 @@ class MicroChart {
     }
     ctx.stroke();
 
-    // 2. ОТРИСОВКА ТОКА (Голубой ступенчатый тренд)
-    ctx.strokeStyle = "#38bdf8"; ctx.lineWidth = 2;
-    ctx.beginPath();
-    for (let i = 0; i < this.data.length; i++) {
-      const x = padL + i;
-      const iNow = (this.data[i].iMin + this.data[i].iMax) / 2;
-      const yI = h - ((iNow - lMinI) / (lMaxI - lMinI)) * h;
-      if (i === 0) ctx.moveTo(x, yI);
-      else ctx.lineTo(x, yI);
-    }
-    ctx.stroke();
-
-    // 3. Двухцветные вертикальные коридоры пульсаций тока (Заряд = Красный, Разряд = Синий)
+    // 2. ОТРИСОВКА ВЕРТИКАЛЬНЫХ КОРИДОРОВ ПУЛЬСАЦИЙ ТОКА
     const yZero = h - ((0 - lMinI) / (lMaxI - lMinI)) * h;
-
     for (let i = 0; i < this.data.length; i++) {
       const x = padL + i;
       const pt = this.data[i];
+      const yMinAmp = h - ((pt.iMin - lMinI) / (lMaxI - lMinI)) * h;
+      const yMaxAmp = h - ((pt.iMax - lMinI) / (lMaxI - lMinI)) * h;
       
-      const yMin = h - ((pt.iMin - lMinI) / (lMaxI - lMinI)) * h;
-      const yMax = h - ((pt.iMax - lMinI) / (lMaxI - lMinI)) * h;
-      
-      ctx.lineWidth = 1.0;
+      ctx.lineWidth = 2.0;
 
-      // Вычисляем экранные пиксели (помня, что верх экрана - это минимум Y, а низ - максимум Y)
-      const yMinAmp = h - ((pt.iMin - lMinI) / (lMaxI - lMinI)) * h; // Точка пикового разряда (в самом низу экрана)
-      const yMaxAmp = h - ((pt.iMax - lMinI) / (lMaxI - lMinI)) * h; // Точка пикового заряда (в самом верху экрана)
-
-      // ЧАСТЬ 1: Рисуем нижнюю (СИНЮЮ) часть линии — от пикового разряда вверх до нуля
+      // Синяя часть коридора (Разряд) - строго ПОД линией нуля (Y >= yZero)
       if (pt.iMin < 0) {
-        // Отрезок идет от самой нижней точки (yMinAmp) вверх до нуля (yZero). 
-        // Но если весь пакет остался в минусе, то рисуем до самого верха пакета (yMaxAmp)
-        const topPoint = (pt.iMax < 0) ? yMaxAmp : yZero;
-        
-        ctx.beginPath();
-        ctx.strokeStyle = "#3b82f6"; // Синий
-        ctx.moveTo(x, yMinAmp);
-        ctx.lineTo(x, topPoint);
-        ctx.stroke();
+        let topPoint = (pt.iMax < 0) ? yMaxAmp : yZero;
+        // Защита: верхняя точка синей линии не может быть выше нуля на экране
+        if (topPoint < yZero) topPoint = yZero; 
+        // Защита: нижняя точка не может быть выше верхней
+        const bottomPoint = Math.max(yMinAmp, yZero);
+
+        if (bottomPoint > topPoint) {
+          ctx.beginPath();
+          ctx.strokeStyle = COLOR_LIGHT_BLUE;
+          ctx.moveTo(x, bottomPoint);
+          ctx.lineTo(x, topPoint);
+          ctx.stroke();
+        }
       }
 
-      // ЧАСТЬ 2: Рисуем верхнюю (КРАСНУЮ) часть линии — от нуля вверх до пикового заряда
+      // Красная часть коридора (Заряд) - строго НАД линией нуля (Y <= yZero)
       if (pt.iMax > 0) {
-        // Отрезок идет от нуля (yZero) вверх до самого пика (yMaxAmp).
-        // Но если весь пакет изначально в плюсе, то начинаем рисовать от самого низа пакета (yMinAmp)
-        const bottomPoint = (pt.iMin > 0) ? yMinAmp : yZero;
-        
-        ctx.beginPath();
-        ctx.strokeStyle = "#ef4444"; // Красный
-        ctx.moveTo(x, bottomPoint);
-        ctx.lineTo(x, yMaxAmp);
-        ctx.stroke();
+        let bottomPoint = (pt.iMin > 0) ? yMinAmp : yZero;
+        // Защита: нижняя точка красной линии не может опускаться ниже нуля на экране
+        if (bottomPoint > yZero) bottomPoint = yZero;
+        // Защита: верхняя точка не может быть ниже нижней
+        const topPoint = Math.min(yMaxAmp, yZero);
+
+        if (bottomPoint > topPoint) {
+          ctx.beginPath();
+          ctx.strokeStyle = COLOR_LIGHT_RED;
+          ctx.moveTo(x, bottomPoint);
+          ctx.lineTo(x, topPoint);
+          ctx.stroke();
+        }
       }
-
-
     }
 
-    // 4. ОТРИСОВКА ЦВЕТНЫХ ЦИФРОВЫХ ШКАЛ БЕЗ СЛОВ МАКС/МИН (Увеличено в 2 раза)
+    // 3. ОТРИСОВКА ОСНОВНОГО ТРЕНДА ТОКА (Срезаем переходы по линии нуля)
+    ctx.lineWidth = 2;
+    for (let i = 0; i < this.data.length - 1; i++) {
+      const x1 = padL + i;
+      const x2 = padL + i + 1;
+      
+      const iNow1 = (this.data[i].iMin + this.data[i].iMax) / 2;
+      const iNow2 = (this.data[i+1].iMin + this.data[i+1].iMax) / 2;
+      
+      let yI1 = h - ((iNow1 - lMinI) / (lMaxI - lMinI)) * h;
+      let yI2 = h - ((iNow2 - lMinI) / (lMaxI - lMinI)) * h;
+
+      // Анализируем пересечение нуля для каждой линии индивидуально
+      if (iNow1 > 0 && iNow2 > 0) {
+        // Полностью в плюсе
+        ctx.strokeStyle = COLOR_LIGHT_RED;
+        ctx.beginPath(); ctx.moveTo(x1, yI1); ctx.lineTo(x2, yI2); ctx.stroke();
+      } else if (iNow1 <= 0 && iNow2 <= 0) {
+        // Полностью в минусе
+        ctx.strokeStyle = COLOR_LIGHT_BLUE;
+        ctx.beginPath(); ctx.moveTo(x1, yI1); ctx.lineTo(x2, yI2); ctx.stroke();
+      } else {
+        // Линия пересекает ноль между точками x1 и x2. Разделяем её на два цветных отрезка.
+        const xZeroCross = x1 + (x2 - x1) * ((yZero - yI1) / (yI2 - yI1));
+
+        // Рисуем часть до нуля
+        ctx.strokeStyle = (iNow1 > 0) ? COLOR_LIGHT_RED : COLOR_LIGHT_BLUE;
+        ctx.beginPath(); ctx.moveTo(x1, yI1); ctx.lineTo(xZeroCross, yZero); ctx.stroke();
+
+        // Рисуем часть после нуля
+        ctx.strokeStyle = (iNow2 > 0) ? COLOR_LIGHT_RED : COLOR_LIGHT_BLUE;
+        ctx.beginPath(); ctx.moveTo(xZeroCross, yZero); ctx.lineTo(x2, yI2); ctx.stroke();
+      }
+    }
+
+
+    // 4. ОТРИСОВКА ЦВЕТНЫХ ЦИФРОВЫХ ШКАЛ
     ctx.font = "bold 18px monospace";
     
     ctx.fillStyle = "#10b981";
     ctx.fillText(`${lMaxV.toFixed(2)}V`, 5, 30);
     ctx.fillText(`${lMinV.toFixed(2)}V`, 5, h - 15);
 
-    ctx.fillStyle = (lMaxI >= 0) ? "#ef4444" : "#3b82f6";
+    ctx.fillStyle = (lMaxI >= 0) ? COLOR_LIGHT_RED : COLOR_LIGHT_BLUE;
     ctx.fillText(`${lMaxI.toFixed(1)}A`, w - padR + 8, 30);
     
-    ctx.fillStyle = (lMinI >= 0) ? "#ef4444" : "#3b82f6";
+    ctx.fillStyle = (lMinI >= 0) ? COLOR_LIGHT_RED : COLOR_LIGHT_BLUE;
     ctx.fillText(`${lMinI.toFixed(1)}A`, w - padR + 8, h - 15);
   }
 }
 
-
 const charts = {};
 Object.keys(CONFIG).forEach(id => { charts[id] = new MicroChart(`ch${id}`, CONFIG[id]); });
+
 </script>
 <script>
 let bleDevice = null;
@@ -424,39 +418,61 @@ let globalMaxI = -Infinity, globalMinI = Infinity;
 
 function handlePkt(event) {
   const view = event.target.value;
-  if (view.byteLength < 12) return;
+  // Защита: пакет с 20 измерениями должен быть строго 82 байта
+  if (view.byteLength < 82) return;
 
-  const v_scale = view.getUint16(0, true);
-  const raw_v_min = view.getInt16(2, true);
-  const raw_v_max = view.getInt16(4, true);
-  const raw_i_min = view.getInt16(6, true);
-  const raw_i_max = view.getInt16(8, true);
-  const counter = view.getUint16(10, true);
+  // Читаем первые 2 байта — это Little-Endian номер пакета counter
+  const counter = view.getUint16(0, true);
 
-  const scaleMode = (v_scale >> 14) & 0x03;
-  let multiplier = 1.0; 
-  if (scaleMode === 1) multiplier = 10.0;
-  if (scaleMode === 2) multiplier = 1000.0;
+  // Переменные для сбора статистики по пакету (для больших цифр табло)
+  let sumV = 0, sumI = 0;
+  let localMinV = Infinity, localMaxV = -Infinity;
+  let localMinI = Infinity, localMaxI = -Infinity;
 
-  const vMin = raw_v_min / 100.0;
-  const vMax = raw_v_max / 100.0;
-  const iMin = (raw_i_min * multiplier) / 1000.0;
-  const iMax = (raw_i_max * multiplier) / 1000.0;
+  // Цикл по 20 замерам (каждый замер занимает по 4 байта, смещение со 2-го байта)
+  for (let k = 0; k < 20; k++) {
+    const offset = 2 + k * 4;
 
-  const vNow = (vMin + vMax) / 2;
-  const iNow = (iMin + iMax) / 2;
+    // Читаем по очереди V и I конкретного замера (по 2 байта в Little-Endian)
+    const raw_v = view.getInt16(offset, true);
+    const raw_i = view.getInt16(offset + 2, true);
 
-    const cellI = document.getElementById("cellI");
+    // Переводим в физические величины (В и А)
+    const vPoint = raw_v / 100.0;
+    const iPoint = raw_i / 1000.0;
+
+    // Накапливаем сумму для вычисления среднего значения за 20 мс
+    sumV += vPoint;
+    sumI += iPoint;
+
+    // Фиксируем экстремумы внутри текущего пакета
+    if (vPoint < localMinV) localMinV = vPoint;
+    if (vPoint > localMaxV) localMaxV = vPoint;
+    if (iPoint < localMinI) localMinI = iPoint;
+    if (iPoint > localMaxI) localMaxI = iPoint;
+
+    // Для секундного графика (осциллографа 1s) пушим ВСЕ 20 замеров отдельно.
+    // Это дает частоту 1000 измерений в секунду и потрясающую детализацию.
+    if (!isInterfacePaused && charts["1s"]) {
+      charts["1s"].push(vPoint, vPoint, iPoint, iPoint, counter);
+    }
+  }
+
+  // Вычисляем средние значения за эти 20 мс для отображения крупных цифр
+  const vNow = sumV / 20;
+  const iNow = sumI / 20;
+
+  // Меняем цвет табло в зависимости от знака среднего тока
+  const cellI = document.getElementById("cellI");
   if (iNow >= 0) { cellI.className = "tablo-cell i-pos"; } else { cellI.className = "tablo-cell i-neg"; }
 
-  // 1. СКОРОСТЬ ОБНОВЛЕНИЯ ЦИФР (4 раза в секунду = каждые 250 мс)
-  // Расчет глобальных экстремумов ловит абсолютно каждый пакет на полной скорости
-  if(vMin < globalMinV) globalMinV = vMin;
-  if(vMax > globalMaxV) globalMaxV = vMax;
-  if(iMin < globalMinI) globalMinI = iMin;
-  if(iMax > globalMaxI) globalMaxI = iMax;
+  // Обновляем глобальные рекорды (MIN/MAX прибора за всё время)
+  if (localMinV < globalMinV) globalMinV = localMinV;
+  if (localMaxV > globalMaxV) globalMaxV = localMaxV;
+  if (localMinI < globalMinI) globalMinI = localMinI;
+  if (localMaxI > globalMaxI) globalMaxI = localMaxI;
 
-  // Отрисовка больших цифр и текстовых блоков — строго 4 раза в секунду (250 мс)
+  // Отрисовка больших цифр на табло — строго 4 раза в секунду (250 мс)
   const nowTime = performance.now();
   if (nowTime - lastDigitUpdateTime >= 250) {
     document.getElementById("txtV").textContent = vNow.toFixed(2);
@@ -468,22 +484,25 @@ function handlePkt(event) {
     lastDigitUpdateTime = nowTime;
   }
 
-  // 2. ПАУЗА ДЛЯ ГРАФИКОВ И ТЕКСТОВОГО ЛОГА
-  // Если пауза нажата — этот блок просто пропускается, сохраняя график неподвижным
   if (isInterfacePaused) return;
 
-  <!-- Object.keys(charts).forEach(id => { charts[id].push(vMin, vMax, iMin, iMax); }); -->
-  Object.keys(charts).forEach(id => { charts[id].push(vMin, vMax, iMin, iMax, counter); });
+  // Для долгосрочных трендов (1m, 10m, 1h) отправляем только сжатые экстремумы.
+  // Это сохраняет точность самописца и защищает оперативную память от перегрузки.
+  Object.keys(charts).forEach(id => {
+    if (id !== "1s") {
+      charts[id].push(localMinV, localMaxV, localMinI, localMaxI, counter);
+    }
+  });
 
+  // Лог терминала в HTML (выводит только первые 14 байт пакета, чтобы не тормозить страницу)
   if (isTermActive) {
     let hexStr = "";
-    for (let i = 0; i < view.byteLength; i++) {
+    for (let i = 0; i < Math.min(view.byteLength, 14); i++) {
       let b = view.getUint8(i).toString(16);
       hexStr += (b.length === 1 ? "0" : "") + b;
     }
-	const decodedText = `| ${vMin.toFixed(2)}-${vMax.toFixed(2)} | ${iMin.toFixed(2)}..${iMax.toFixed(2)}`;
-    //writeLog(`[Pkt #${counter}] 0x${hexStr.toUpperCase()}`);
-	writeLog(`[Pkt #${counter}] 0x${hexStr.toUpperCase().padEnd(24, ' ')} ${decodedText}`);
+    const decodedText = `| Avg V: ${vNow.toFixed(2)}V | Avg I: ${iNow.toFixed(2)}A`;
+    writeLog(`[Pkt #${counter}] 0x${hexStr.toUpperCase()}... ${decodedText} (${view.byteLength} bytes)`);
   }
 }
 

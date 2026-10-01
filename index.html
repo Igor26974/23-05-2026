@@ -1,312 +1,505 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BLE VA Монитор - Пиковый Осциллограф</title>
-    <style>
-        body { font-family: sans-serif; background: #121212; color: #fff; text-align: center; padding: 20px; margin: 0; }
-        .container { max-width: 560px; margin: 0 auto; padding: 10px; }
-        button { color: white; border: none; padding: 15px 30px; font-size: 18px; border-radius: 8px; cursor: pointer; font-weight: bold; margin-bottom: 15px; width: 100%; box-sizing: border-box; transition: background 0.3s; }
-        .btn-connect { background: #00adb5; }
-        .btn-connect:hover { background: #007a80; }
-        .btn-disconnect { background: #ff4d4d; }
-        .btn-disconnect:hover { background: #cc3333; }
-        .btn-demo { background: #ffa500; color: #121212; display: none; margin-bottom: 20px; }
-        .btn-demo:hover { background: #cc8400; }
-        .monitor { background: #1e1e1e; padding: 15px; border-radius: 10px; border: 1px solid #333; text-align: left; margin-bottom: 15px; }
-        .param { font-size: 18px; margin: 8px 0; font-family: monospace; }
-        .param span { font-weight: bold; color: #00adb5; }
-        
-        .time-scale-wrapper { display: flex; gap: 5px; margin-bottom: 10px; width: 100%; box-sizing: border-box; }
-        .time-scale-wrapper button { padding: 8px; font-size: 14px; margin-bottom: 0; background: #2d2d2d; border: 1px solid #444; }
-        .time-scale-wrapper button.active { background: #00adb5; color: white; border-color: #00adb5; }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BLE VA-Monitor v291130</title>
+<style>
+  :root { --bg: #0b0b0d; --card: #131317; --txt: #e2e8f0; --accent: #2563eb; --red: #ef4444; --blue: #3b82f6; --green: #10b981; }
+  * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, sans-serif; }
+  body { background: var(--bg); color: var(--txt); padding: 15px; padding-top: 5px; }
+  .grid-main { display: grid; grid-template-columns: 1fr; gap: 12px; max-width: 1300px; margin: 0 auto; }
+  .card { background: var(--card); border-radius: 12px; padding: 15px; border: 1px solid #1e1e24; }
+  
+    .sticky-tablo { position: sticky; top: 0; z-index: 9999; background: transparent; padding: 8px 0; border-bottom: none; pointer-events: none; }
 
-        .chart-wrapper { position: relative; background: #1a1a1a; padding: 20px 55px 30px 55px; border-radius: 10px; border: 1px solid #333; box-sizing: border-box; }
-        canvas { width: 100%; height: 200px; display: block; background: #151515; border-radius: 6px; }
-        .axis-label { position: absolute; font-family: monospace; font-size: 11px; font-weight: bold; }
-        .axis-v { left: 8px; color: #ff4d4d; text-align: right; width: 42px; }
-        .axis-i { right: 8px; color: #4da6ff; text-align: left; width: 45px; }
-        .axis-t { bottom: 8px; color: #888; font-size: 10px; width: 60px; text-align: center; }
-        #log { margin-top: 15px; color: #888; font-family: monospace; font-size: 13px; }
-    </style>
+  
+  .row-btn { display: flex; gap: 10px; margin-bottom: 5px; flex-wrap: wrap; align-items: center; }
+  .ver-tag { font-family: monospace; font-size: 12px; color: #52525b; margin-left: auto; font-weight: bold; }
+  button { background: #1f1f24; color: white; border: none; padding: 9px 15px; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 13px; transition: 0.15s; }
+  button.active { background: var(--accent); }
+  button.btn-demo { background: #7c2d12; }
+  button.btn-demo.active { background: #ea580c; }
+  
+  .tablo-container { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .tablo-cell { text-align: center; background: transparent !important; padding: 12px; border-radius: 8px; border: none !important; pointer-events: none; }
+
+  .tablo-label { font-size: 13px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tablo-val { font-size: 54px; font-weight: 800; font-family: monospace; line-height: 1.1; margin: 2px 0; }
+  
+  .tablo-cell.v { color: var(--green); }
+  .tablo-cell.i-pos { color: var(--red); }
+  .tablo-cell.i-neg { color: var(--blue); }
+  
+  .tablo-sub { font-size: 14px; color: #71717a; font-family: monospace; font-weight: bold; }
+  .chart-wrapper { position: relative; background: #040406; border-radius: 8px; margin-top: 12px; border: 1px solid #1f1f24; padding: 2px; }
+  canvas { display: block; width: 100%; height: 240px; }
+  .terminal-box { background: #000; border: 1px solid var(--red); border-radius: 6px; padding: 10px; font-family: monospace; font-size: 11px; height: 140px; overflow-y: auto; color: var(--green); margin-top: 12px; }
+  .hidden { display: none !important; }
+  
+  /* Стили для всплывающего окна подсказки */
+  .chart-tooltip {
+    position: absolute;
+    background: rgba(19, 19, 23, 0.95);
+    border: 1px solid #2d2d34;
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-family: monospace;
+    font-size: 12px;
+    color: #e2e8f0;
+    pointer-events: none;
+    z-index: 10000;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    line-height: 1.4;
+  }
+</style>
 </head>
 <body>
+<div class="grid-main">
+  <div class="card">
+    <div class="row-btn">
+      <button id="btnConnect" class="active">Подключить BLE</button>
+      <button id="btnDemo1" class="btn-demo">DEMO 1 (Старое)</button>
+      <button id="btnDemo2" class="btn-demo">DEMO 2 (Новое)</button>
+	  <button id="btnPause" onclick="toggleInterfacePause()" style="background: #27272a;">Пауза</button>
+      <button id="btnTerm">Лог: СКРЫТ</button>
+      <span class="ver-tag">v291130</span>
+    </div>
+  </div>
 
-<div class="container">
-    <h2>BLE VA-Монитор (Пиковые Столбики)</h2>
+  <div class="sticky-tablo">
+    <div class="tablo-container">
+      <div id="cellV" class="tablo-cell v">
+        <div class="tablo-label">Напряжение</div>
+        <div id="txtV" class="tablo-val">0.00</div>
+        <div id="txtVExtr" class="tablo-sub">MIN: 0.00В | MAX: 0.00В</div>
+      </div>
+      <div id="cellI" class="tablo-cell i-pos">
+        <div class="tablo-label">Ток</div>
+        <div id="txtI" class="tablo-val">0.000</div>
+        <div id="txtIExtr" class="tablo-sub">MIN: 0.00А | MAX: 0.00А</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="row-btn">
+      <span style="font-size:13px; color:#71717a; margin-right:5px; font-weight:600;">Графики на экране:</span>
+      <button class="btn-ch" data-id="1s">1 Секунда</button>
+      <button class="btn-ch" data-id="10s">10 Секунд</button>
+      <button class="btn-ch" data-id="1m">1 Минута</button>
+      <button class="btn-ch" data-id="10m">10 Минут</button>
+    </div>
     
-    <button id="actionBtn" class="btn-connect">ПОДКЛЮЧИТЬСЯ И ВКЛЮЧИТЬ ГРАФИК</button>
-    <button id="demoBtn" class="btn-demo">ВКЛЮЧИТЬ ДЕМО-РЕЖИМ</button>
+    <div id="wrapper-1s" class="chart-wrapper hidden"><canvas id="ch1s"></canvas></div>
+    <div id="wrapper-10s" class="chart-wrapper hidden"><canvas id="ch10s"></canvas></div>
+    <div id="wrapper-1m" class="chart-wrapper hidden"><canvas id="ch1m"></canvas></div>
+    <div id="wrapper-10m" class="chart-wrapper hidden"><canvas id="ch10m"></canvas></div>
+  </div>
 
-    <div class="monitor">
-        <div class="param">Напряжение: <span id="vNow">0.00</span> В</div>
-        <div class="param">V Мин: <span id="vMin">0.00</span> | V Макс: <span id="vMax">0.00</span></div>
-        <hr style="border-color: #333; margin: 10px 0;">
-        <div class="param">Ток: <span id="iNow">0.000</span> А</div>
-        <div class="param">I Мин: <span id="iMin">0.000</span> | I Макс: <span id="iMax">0.000</span></div>
-    </div>
-
-    <div class="time-scale-wrapper">
-        <button id="scale-1s" class="active">1 Секунда</button>
-        <button id="scale-10s">10 Секунд</button>
-        <button id="scale-1m">1 Минута</button>
-        <button id="scale-10m">10 Минут</button>
-    </div>
-
-    <div class="chart-wrapper">
-        <div id="v-max-lbl" class="axis-label axis-v" style="top: 20px;">15.0В</div>
-        <div id="v-mid-lbl" class="axis-label axis-v" style="top: 120px;">12.5В</div>
-        <div id="v-min-lbl" class="axis-label axis-v" style="top: 210px;">10.0В</div>
-
-        <canvas id="customChart" width="500" height="200"></canvas>
-
-        <div id="i-max-lbl" class="axis-label axis-i" style="top: 20px;">5.00А</div>
-        <div id="i-mid-lbl" class="axis-label axis-i" style="top: 120px;">2.50А</div>
-        <div id="i-min-lbl" class="axis-label axis-i" style="top: 210px;">0.00А</div>
-
-        <div id="t-4" class="axis-label axis-t" style="left: 55px;">-4.0s</div>
-        <div id="t-2" class="axis-label axis-t" style="left: 245px;">-2.0s</div>
-        <div id="t-0" class="axis-label axis-t" style="right: 55px; color: #00adb5;">0.0s</div>
-    </div>
-
-    <div id="log">Статус: Ожидание подключения...</div>
+  <div id="termBox" class="terminal-box hidden"></div>
 </div>
 <script>
-const SERVICE_UUID = "4fafc201-1fb5-459e-8fcc-c5c9c331914b";
-const CHARACTERISTIC_UUID = "beb5483e-36e1-4688-b7f5-ea07361b26a8";
+const CONFIG = {
+  "1s":  { size: 100, div: 1,  label: "Осциллограмма 1с (100 точек/сек)" },
+  "10s": { size: 200, div: 5,  label: "Экран 10с (Разрешение 20 Гц)" },
+  "1m":  { size: 300, div: 10, label: "Тренды 1м" },
+  "10m": { size: 300, div: 100, label: "История 10м" }
+};
 
-let bleDevice = null;
-let dataCharacteristic = null;
-let isConnected = false;
-let localDemoState = false;
+class MicroChart {
+  constructor(canvasId, cfg) {
+    this.canvas = document.getElementById(canvasId);
+    this.ctx = this.canvas.getContext('2d');
+    this.cfg = cfg;
+    this.data = []; 
+    this.tickCounter = 0;
+    window.addEventListener('resize', () => this.render());
+	  // Подсказка на паузе. Минимум кода, все скобки проверены:
+    this.canvas.addEventListener('mousemove', (e) => {
+      if (!isInterfacePaused || this.data.length < 2) return;
+      const r = this.canvas.getBoundingClientRect();
+      const x = e.clientX - r.left;
+      if (x < 80 || x > r.width - 80) return;
+      <!-- const idx = Math.round((x - 80) / ((r.width - 160) / (this.cfg.size - 1))); -->
+	  const idx = Math.round(x - 80);
+      const pt = this.data[idx];
+      if (!pt) return;
+      <!-- this.canvas.title = `V: ${pt.vMin.toFixed(2)}..${pt.vMax.toFixed(2)}V\nI: ${pt.iMin.toFixed(3)}..${pt.iMax.toFixed(3)}A`; -->
+	  this.canvas.title = `Pkt: ${pt.pktStr || '?'}\nV: ${pt.vMin.toFixed(2)}..${pt.vMax.toFixed(2)}V\nI: ${pt.iMin.toFixed(3)}..${pt.iMax.toFixed(3)}A`;
+	  
+    });
+  }
 
-const canvas = document.getElementById('customChart');
-const ctx = canvas.getContext('2d');
+<!-- push(vMin, vMax, iMin, iMax) { -->
+    <!-- // Если аккумуляторы еще не созданы, инициализируем их текущими значениями -->
+    <!-- if (!this.acc) { -->
+      <!-- this.acc = { vMin, vMax, iMin, iMax }; -->
+    <!-- } else { -->
+      <!-- // Накапливаем истинные минимумы и максимумы со ВСЕХ пакетов без исключения -->
+      <!-- if (vMin < this.acc.vMin) this.acc.vMin = vMin; -->
+      <!-- if (vMax > this.acc.vMax) this.acc.vMax = vMax; -->
+      <!-- if (iMin < this.acc.vMin) this.acc.iMin = iMin; -->
+      <!-- if (iMax > this.acc.iMax) this.acc.iMax = iMax; -->
+    <!-- } -->
 
-let maxPoints = 120; // 120 столбиков по ширине экрана, как на вашем TFT
-let timeDivider = 1; 
-let sampleCounter = 0;
-
-let current_pixel_v_min = 32767, current_pixel_v_max = -32768;
-let current_pixel_i_min = 2000000, current_pixel_i_max = -2000000;
-
-const voltageHistory = []; 
-const currentHistory = []; 
-let secondsElapsed = 0.0;
-
-function drawChart() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    
-    ctx.strokeStyle = '#262626'; ctx.lineWidth = 1;
-    for (let i = 40; i < canvas.height; i += 40) {
-        ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(canvas.width, i); ctx.stroke();
-    }
-    for (let i = 50; i < canvas.width; i += 50) {
-        ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, canvas.height); ctx.stroke();
-    }
-
-    let minV = 11.0, maxV = 14.0;
-    if (voltageHistory.length > 0) {
-        let actualMin = Math.min(...voltageHistory.map(d => d.min));
-        let actualMax = Math.max(...voltageHistory.map(d => d.max));
-        let delta = actualMax - actualMin;
-        if (delta < 0.2) delta = 0.5;
-        minV = actualMin - (delta * 0.1);
-        maxV = actualMax + (delta * 0.1);
-    }
-    document.getElementById('v-max-lbl').innerText = maxV.toFixed(1) + "В";
-    document.getElementById('v-mid-lbl').innerText = ((maxV + minV) / 2).toFixed(1) + "В";
-    document.getElementById('v-min-lbl').innerText = minV.toFixed(1) + "В";
-
-    let minI = -1.0, maxI = 5.0;
-    if (currentHistory.length > 0) {
-        let actualMin = Math.min(...currentHistory.map(d => d.min));
-        let actualMax = Math.max(...currentHistory.map(d => d.max));
-        let delta = actualMax - actualMin;
-        if (delta < 0.2) delta = 0.5;
-        minI = actualMin - (delta * 0.1);
-        maxI = actualMax + (delta * 0.1);
-    }
-    document.getElementById('i-max-lbl').innerText = maxI.toFixed(1) + "А";
-    document.getElementById('i-mid-lbl').innerText = ((maxI + minI) / 2).toFixed(1) + "А";
-    document.getElementById('i-min-lbl').innerText = minI.toFixed(1) + "А";
-
-    ctx.lineWidth = Math.max(1, Math.floor(canvas.width / maxPoints)); 
-
-    for (let i = 0; i < voltageHistory.length; i++) {
-        const x = (i / (maxPoints - 1)) * canvas.width;
-
-        const yVmin = canvas.height - ((voltageHistory[i].min - minV) / (maxV - minV)) * canvas.height;
-        const yVmax = canvas.height - ((voltageHistory[i].max - minV) / (maxV - minV)) * canvas.height;
-        ctx.strokeStyle = '#00ff00';
-        ctx.beginPath(); ctx.moveTo(x, yVmin); ctx.lineTo(x, yVmax); ctx.stroke();
-
-        const yImin = canvas.height - ((currentHistory[i].min - minI) / (maxI - minI)) * canvas.height;
-        const yImax = canvas.height - ((currentHistory[i].max - minI) / (maxI - minI)) * canvas.height;
-        const yZero = canvas.height - ((0 - minI) / (maxI - minI)) * canvas.height;
-
-        if (currentHistory[i].max > 0 && currentHistory[i].min < 0) {
-            ctx.strokeStyle = '#ff3333'; ctx.beginPath(); ctx.moveTo(x, yZero); ctx.lineTo(x, yImax); ctx.stroke();
-            ctx.strokeStyle = '#3399ff'; ctx.beginPath(); ctx.moveTo(x, yZero); ctx.lineTo(x, yImin); ctx.stroke();
-        } else {
-            ctx.strokeStyle = (currentHistory[i].max >= 0) ? '#ff3333' : '#3399ff';
-            ctx.beginPath(); ctx.moveTo(x, yImin); ctx.lineTo(x, yImax); ctx.stroke();
-        }
-    }
-}
-drawChart();
-function setScaleActive(id, points, divider, label0, label2, label4) {
-    document.querySelectorAll('.time-scale-wrapper button').forEach(b => b.classList.remove('active'));
-    document.getElementById(id).classList.add('active');
-    maxPoints = points;
-    timeDivider = divider;
-    sampleCounter = 0;
-    voltageHistory.length = 0;
-    currentHistory.length = 0;
-    
-    current_pixel_v_min = 32767; current_pixel_v_max = -32768;
-    current_pixel_i_min = 2000000; current_pixel_i_max = -2000000;
-
-    document.getElementById('t-0').innerText = label0;
-    document.getElementById('t-2').innerText = label2;
-    document.getElementById('t-4').innerText = label4;
-    drawChart();
-}
-
-document.getElementById('scale-1s').addEventListener('click', () => setScaleActive('scale-1s', 120, 1, '0.0s', '-0.5s', '-1.0s'));
-document.getElementById('scale-10s').addEventListener('click', () => setScaleActive('scale-10s', 120, 5, '0.0s', '-5.0s', '-10.0s'));
-document.getElementById('scale-1m').addEventListener('click', () => setScaleActive('scale-1m', 120, 30, '0s', '-30s', '-60s'));
-document.getElementById('scale-10m').addEventListener('click', () => setScaleActive('scale-10m', 120, 300, '0m', '-5m', '-10m'));
-
-document.getElementById('actionBtn').addEventListener('click', function() {
-    if (!isConnected) {
-        document.getElementById('log').innerText = "Запрос устройства...";
-        navigator.bluetooth.requestDevice({
-            acceptAllDevices: true,
-            optionalServices: [SERVICE_UUID]
-        })
-        .then(device => {
-            bleDevice = device;
-            document.getElementById('log').innerText = "Подключение к GATT серверу...";
-            bleDevice.addEventListener('gattserverdisconnected', onDisconnected);
-            return bleDevice.gatt.connect();
-        })
-        .then(server => server.getPrimaryService(SERVICE_UUID))
-        .then(service => service.getCharacteristic(CHARACTERISTIC_UUID))
-        .then(characteristic => {
-            dataCharacteristic = characteristic;
-            return dataCharacteristic.startNotifications().then(() => {
-                dataCharacteristic.addEventListener('characteristicvaluechanged', handleIncomingData);
-                isConnected = true;
-                const btn = document.getElementById('actionBtn');
-                btn.innerText = "ОТКЛЮЧИТЬ BLE VA МОНИТОР";
-                btn.className = "btn-disconnect";
-                document.getElementById('log').innerText = "Связь установлена! Поток запущен.";
-                document.getElementById('demoBtn').style.display = 'block';
-            });
-        })
-        .catch(error => {
-            document.getElementById('log').innerText = "Ошибка: " + error.message;
-        });
+    <!-- this.tickCounter++; -->
+    <!-- // Переносим данные в основной массив графика только когда накопилось нужное число пакетов (div) -->
+    <!-- if (this.tickCounter % this.cfg.div === 0) { -->
+      <!-- if (this.data.length >= this.cfg.size) this.data.shift(); -->
+      
+      <!-- // Сохраняем накопленные за весь период экстремумы -->
+      <!-- this.data.push({  -->
+        <!-- vMin: this.acc.vMin,  -->
+        <!-- vMax: this.acc.vMax,  -->
+        <!-- iMin: this.acc.iMin,  -->
+        <!-- iMax: this.acc.iMax  -->
+      <!-- }); -->
+      
+      <!-- // Сбрасываем аккумуляторы для следующего цикла накопления -->
+      <!-- this.acc = null; -->
+      <!-- this.render(); -->
+    <!-- } -->
+  <!-- } -->
+  push(vMin, vMax, iMin, iMax, pktNum) {
+    if (!this.acc) {
+      // Запоминаем номер самого первого пакета в этом цикле накопления
+      this.acc = { vMin, vMax, iMin, iMax, pktStart: pktNum, pktEnd: pktNum };
     } else {
-        if (bleDevice && bleDevice.gatt.connected) {
-            bleDevice.gatt.disconnect();
-        }
+      if (vMin < this.acc.vMin) this.acc.vMin = vMin;
+      if (vMax > this.acc.vMax) this.acc.vMax = vMax;
+      if (iMin < this.acc.iMin) this.acc.iMin = iMin;
+      if (iMax > this.acc.iMax) this.acc.iMax = iMax;
+      // Обновляем номер последнего пришедшего пакета
+      this.acc.pktEnd = pktNum;
     }
-});
 
-document.getElementById('demoBtn').addEventListener('click', function() {
-    if (dataCharacteristic) {
-        localDemoState = !localDemoState;
-        const cmdBuffer = new Uint8Array([localDemoState ? 1 : 0]);
-        dataCharacteristic.writeValue(cmdBuffer).then(() => {
-            if(localDemoState) {
-                document.getElementById('demoBtn').innerText = "ВЫКЛЮЧИТЬ ДЕМО-РЕЖИМ";
-                document.getElementById('demoBtn').style.background = '#ffcc00';
-            } else {
-                document.getElementById('demoBtn').innerText = "ВКЛЮЧИТЬ ДЕМО-РЕЖИМ";
-                document.getElementById('demoBtn').style.background = '#ffa500';
-            }
-        });
+    this.tickCounter++;
+    if (this.tickCounter % this.cfg.div === 0) {
+      // Защита: если график скрыт, clientWidth равен 0. Задаем минимальную ширину по умолчанию
+      let maxPoints = this.canvas.parentElement.clientWidth - 160; 
+      if (maxPoints <= 0) maxPoints = this.cfg.size; 
+      
+      while (this.data.length >= maxPoints) this.data.shift();
+      
+      this.data.push({ 
+        vMin: this.acc.vMin, 
+        vMax: this.acc.vMax, 
+        iMin: this.acc.iMin, 
+        iMax: this.acc.iMax,
+        pktStr: this.acc.pktStart === this.acc.pktEnd ? `#${this.acc.pktStart}` : `#${this.acc.pktStart}..${this.acc.pktEnd}`
+      });
+      
+      this.acc = null;
+      this.render();
     }
-});
-
-function onDisconnected() {
-    isConnected = false;
-    const btn = document.getElementById('actionBtn');
-    btn.innerText = "ПОДКЛЮЧИТЬСЯ И ВКЛЮЧИТЬ ГРАФИК";
-    btn.className = "btn-connect";
-    document.getElementById('demoBtn').style.display = 'none';
-    localDemoState = false;
-    document.getElementById('demoBtn').innerText = "ВКЛЮЧИТЬ ДЕМО-РЕЖИМ";
-    document.getElementById('demoBtn').style.background = '#ffa500';
-    document.getElementById('log').innerText = "Статус: Соединение разорвано.";
-    voltageHistory.length = 0;
-    currentHistory.length = 0;
-    secondsElapsed = 0.0;
-    drawChart();
-}
-
-function handleIncomingData(event) {
-    const buffer = event.target.value;
+  }
+  
+  
+  render() {
+    const w = this.canvas.width = this.canvas.parentElement.clientWidth;
+    const h = this.canvas.height = 240;
+    const ctx = this.ctx;
     
-    // ИСПРАВЛЕНО: Читаем строго 12-байтовый стабильный пакет от прошивки v5.8
-    if (buffer.byteLength >= 12) {
-        const v_now = buffer.getInt16(0, true) / 100.0;
-        const v_min = buffer.getInt16(2, true) / 100.0;
-        const v_max = buffer.getInt16(4, true) / 100.0;
+    ctx.fillStyle = "#040406"; ctx.fillRect(0,0,w,h);
+    
+    // Сетка
+    ctx.strokeStyle = "#16161b"; ctx.lineWidth = 1;
+    for(let i=1; i<4; i++) { let y = (h/4)*i; ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke(); }
+    
+    // Границы Осей: Левая (Вольты, смещение 80px), Правая (Ток, смещение 80px от правого края)
+    const padL = 80, padR = 80;
+    ctx.strokeStyle = "#2d2d34"; 
+    ctx.beginPath(); ctx.moveTo(padL, 0); ctx.lineTo(padL, h); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(w - padR, 0); ctx.lineTo(w - padR, h); ctx.stroke();
 
-        const raw_i_now = buffer.getInt16(6, true);
-        const raw_i_min = buffer.getInt16(8, true);
-        const raw_i_max = buffer.getInt16(10, true);
+    ctx.fillStyle = "#52525b"; ctx.font = "11px monospace";
+    ctx.fillText(this.cfg.label, padL + 10, 18);
 
-        // Прямой перевод мА в Амперы
-        const i_now = raw_i_now / 1000.0;
-        const i_min = raw_i_min / 1000.0;
-        const i_max = raw_i_max / 1000.0;
+    if (this.data.length < 2) return;
 
-        document.getElementById('vNow').innerText = v_now.toFixed(2);
-        document.getElementById('vMin').innerText = v_min.toFixed(2);
-        document.getElementById('vMax').innerText = v_max.toFixed(2);
-
-        let absI = Math.abs(i_now);
-        if (absI >= 100.0) document.getElementById('iNow').innerText = i_now.toFixed(0);
-        else if (absI >= 10.0) document.getElementById('iNow').innerText = i_now.toFixed(1);
-        else document.getElementById('iNow').innerText = i_now.toFixed(3);
-
-        document.getElementById('iMin').innerText = i_min.toFixed(2);
-        document.getElementById('iMax').innerText = i_max.toFixed(2);
-
-        // Копим экстремумы для вертикального столбика
-        if (v_min < current_pixel_v_min) current_pixel_v_min = v_min;
-        if (v_max > current_pixel_v_max) current_pixel_v_max = v_max;
-        if (i_min < current_pixel_i_min) current_pixel_i_min = i_min;
-        if (i_max > current_pixel_i_max) current_pixel_i_max = i_max;
-
-        sampleCounter++;
-        if (sampleCounter >= timeDivider) {
-            sampleCounter = 0;
-            
-            voltageHistory.push({ min: current_pixel_v_min, max: current_pixel_v_max });
-            currentHistory.push({ min: current_pixel_i_min, max: current_pixel_i_max });
-
-            if (voltageHistory.length > maxPoints) voltageHistory.shift();
-            if (currentHistory.length > maxPoints) currentHistory.shift();
-
-            current_pixel_v_min = 32767; current_pixel_v_max = -32768;
-            current_pixel_i_min = 2000000; current_pixel_i_max = -2000000;
-
-            if (timeDivider === 1) {
-                secondsElapsed += 0.1;
-                document.getElementById('t-4').innerText = (secondsElapsed - 1.0).toFixed(1) + "s";
-                document.getElementById('t-2').innerText = (secondsElapsed - 0.5).toFixed(1) + "s";
-                document.getElementById('t-0').innerText = secondsElapsed.toFixed(1) + "s";
-            }
-            drawChart();
-        }
+    // Расчет экстремумов для независимого масштабирования осей
+    let lMinI = Infinity, lMaxI = -Infinity;
+    let lMinV = Infinity, lMaxV = -Infinity;
+    for (let i = 0; i < this.data.length; i++) {
+      if (this.data[i].iMin < lMinI) lMinI = this.data[i].iMin;
+      if (this.data[i].iMax > lMaxI) lMaxI = this.data[i].iMax;
+      if (this.data[i].vMin < lMinV) lMinV = this.data[i].vMin;
+      if (this.data[i].vMax > lMaxV) lMaxV = this.data[i].vMax;
     }
+    if (lMinI === Infinity || lMinI === lMaxI) { lMinI = -1; lMaxI = 1; }
+    if (lMinV === Infinity || lMinV === lMaxV) { lMinV = 10; lMaxV = 15; }
+
+    // 1. ОТРИСОВКА ЛИНИИ НАПРЯЖЕНИЯ (Зеленый ступенчатый тренд)
+    ctx.strokeStyle = "#10b981"; ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (let i = 0; i < this.data.length; i++) {
+      const x = padL + i;
+      const vNow = (this.data[i].vMin + this.data[i].vMax) / 2;
+      const yV = h - ((vNow - lMinV) / (lMaxV - lMinV)) * h;
+      if (i === 0) ctx.moveTo(x, yV);
+      else ctx.lineTo(x, yV);
+    }
+    ctx.stroke();
+
+    // 2. ОТРИСОВКА ТОКА (Голубой ступенчатый тренд)
+    ctx.strokeStyle = "#38bdf8"; ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let i = 0; i < this.data.length; i++) {
+      const x = padL + i;
+      const iNow = (this.data[i].iMin + this.data[i].iMax) / 2;
+      const yI = h - ((iNow - lMinI) / (lMaxI - lMinI)) * h;
+      if (i === 0) ctx.moveTo(x, yI);
+      else ctx.lineTo(x, yI);
+    }
+    ctx.stroke();
+
+    // 3. Двухцветные вертикальные коридоры пульсаций тока (Заряд = Красный, Разряд = Синий)
+    const yZero = h - ((0 - lMinI) / (lMaxI - lMinI)) * h;
+
+    for (let i = 0; i < this.data.length; i++) {
+      const x = padL + i;
+      const pt = this.data[i];
+      
+      const yMin = h - ((pt.iMin - lMinI) / (lMaxI - lMinI)) * h;
+      const yMax = h - ((pt.iMax - lMinI) / (lMaxI - lMinI)) * h;
+      
+      ctx.lineWidth = 1.0;
+
+      // Вычисляем экранные пиксели (помня, что верх экрана - это минимум Y, а низ - максимум Y)
+      const yMinAmp = h - ((pt.iMin - lMinI) / (lMaxI - lMinI)) * h; // Точка пикового разряда (в самом низу экрана)
+      const yMaxAmp = h - ((pt.iMax - lMinI) / (lMaxI - lMinI)) * h; // Точка пикового заряда (в самом верху экрана)
+
+      // ЧАСТЬ 1: Рисуем нижнюю (СИНЮЮ) часть линии — от пикового разряда вверх до нуля
+      if (pt.iMin < 0) {
+        // Отрезок идет от самой нижней точки (yMinAmp) вверх до нуля (yZero). 
+        // Но если весь пакет остался в минусе, то рисуем до самого верха пакета (yMaxAmp)
+        const topPoint = (pt.iMax < 0) ? yMaxAmp : yZero;
+        
+        ctx.beginPath();
+        ctx.strokeStyle = "#3b82f6"; // Синий
+        ctx.moveTo(x, yMinAmp);
+        ctx.lineTo(x, topPoint);
+        ctx.stroke();
+      }
+
+      // ЧАСТЬ 2: Рисуем верхнюю (КРАСНУЮ) часть линии — от нуля вверх до пикового заряда
+      if (pt.iMax > 0) {
+        // Отрезок идет от нуля (yZero) вверх до самого пика (yMaxAmp).
+        // Но если весь пакет изначально в плюсе, то начинаем рисовать от самого низа пакета (yMinAmp)
+        const bottomPoint = (pt.iMin > 0) ? yMinAmp : yZero;
+        
+        ctx.beginPath();
+        ctx.strokeStyle = "#ef4444"; // Красный
+        ctx.moveTo(x, bottomPoint);
+        ctx.lineTo(x, yMaxAmp);
+        ctx.stroke();
+      }
+
+
+    }
+
+    // 4. ОТРИСОВКА ЦВЕТНЫХ ЦИФРОВЫХ ШКАЛ БЕЗ СЛОВ МАКС/МИН (Увеличено в 2 раза)
+    ctx.font = "bold 18px monospace";
+    
+    ctx.fillStyle = "#10b981";
+    ctx.fillText(`${lMaxV.toFixed(2)}V`, 5, 30);
+    ctx.fillText(`${lMinV.toFixed(2)}V`, 5, h - 15);
+
+    ctx.fillStyle = (lMaxI >= 0) ? "#ef4444" : "#3b82f6";
+    ctx.fillText(`${lMaxI.toFixed(1)}A`, w - padR + 8, 30);
+    
+    ctx.fillStyle = (lMinI >= 0) ? "#ef4444" : "#3b82f6";
+    ctx.fillText(`${lMinI.toFixed(1)}A`, w - padR + 8, h - 15);
+  }
 }
+
+
+const charts = {};
+Object.keys(CONFIG).forEach(id => { charts[id] = new MicroChart(`ch${id}`, CONFIG[id]); });
 </script>
-</body>
+<script>
+let bleDevice = null;
+let bleChar = null;
+let activeDemo = 0; 
+let isInterfacePaused = false;
+let lastDigitUpdateTime = 0;
+
+const MAX_LOG_LINES = 40;
+const termBox = document.getElementById("termBox");
+let isTermActive = false;
+
+function writeLog(hexStr) {
+  if (!isTermActive) return;
+  const line = document.createElement("div");
+  const ms = new Date().getMilliseconds().toString().padStart(3, '0'); 
+  line.textContent = `[${new Date().toLocaleTimeString()}.${ms}] BLE RX: ${hexStr}`;
+  termBox.appendChild(line);
+  if (termBox.children.length > MAX_LOG_LINES) termBox.removeChild(termBox.firstChild);
+  termBox.scrollTop = termBox.scrollHeight;
+}
+
+document.getElementById("btnTerm").onclick = (e) => {
+  isTermActive = !isTermActive;
+  if(isTermActive) { e.target.textContent = "Лог: АКТИВЕН"; termBox.classList.remove("hidden"); }
+  else { e.target.textContent = "Лог: СКРЫТ"; termBox.classList.add("hidden"); termBox.innerHTML=""; }
+};
+
+function saveChartStates() {
+  const states = {};
+  document.querySelectorAll(".btn-ch").forEach(btn => {
+    states[btn.dataset.id] = btn.classList.contains("active");
+  });
+  localStorage.setItem("va_charts_v5", JSON.stringify(states));
+}
+
+function loadChartStates() {
+  const saved = localStorage.getItem("va_charts_v5");
+  const states = saved ? JSON.parse(saved) : { "1s": true, "10s": true, "1m": false, "10m": false };
+  document.querySelectorAll(".btn-ch").forEach(btn => {
+    const id = btn.dataset.id;
+    if (states[id]) {
+      btn.classList.add("active");
+      document.getElementById(`wrapper-${id}`).classList.remove("hidden");
+    } else {
+      btn.classList.remove("active");
+      document.getElementById(`wrapper-${id}`).classList.add("hidden");
+    }
+  });
+}
+
+document.querySelectorAll(".btn-ch").forEach(btn => {
+  btn.onclick = () => {
+    btn.classList.toggle("active");
+    document.getElementById(`wrapper-${btn.dataset.id}`).classList.toggle("hidden");
+    saveChartStates();
+    // Принудительная перерисовка при смене видимости, чтобы график не ломался
+    if (charts[btn.dataset.id]) charts[btn.dataset.id].render();
+  };
+});
+
+async function sendDemoCmd(cmdByte) {
+  if (!bleChar) return;
+  try { await bleChar.writeValue(new Uint8Array([cmdByte])); } catch(e) { console.error(e); }
+}
+
+document.getElementById("btnDemo1").onclick = async () => {
+  activeDemo = (activeDemo === 1) ? 0 : 1; updateDemoUI(); await sendDemoCmd(activeDemo);
+};
+
+document.getElementById("btnDemo2").onclick = async () => {
+  activeDemo = (activeDemo === 2) ? 0 : 2; updateDemoUI(); await sendDemoCmd(activeDemo);
+};
+
+function updateDemoUI() {
+  document.getElementById("btnDemo1").classList.toggle("active", activeDemo === 1);
+  document.getElementById("btnDemo2").classList.toggle("active", activeDemo === 2);
+}
+
+document.getElementById("btnConnect").onclick = async () => {
+  try {
+    bleDevice = await navigator.bluetooth.requestDevice({
+      filters: [
+        { name: "ESP32-C3_VA_Envelope" },
+        { services: ["4fafc201-1fb5-459e-8fcc-c5c9c331914b"] }
+      ],
+      optionalServices: ["4fafc201-1fb5-459e-8fcc-c5c9c331914b"]
+    });
+    const server = await bleDevice.gatt.connect();
+    const service = await server.getPrimaryService("4fafc201-1fb5-459e-8fcc-c5c9c331914b");
+    bleChar = await service.getCharacteristic("beb5483e-36e1-4688-b7f5-ea07361b26a8");
+    
+    await bleChar.startNotifications();
+    bleChar.addEventListener('characteristicvaluechanged', handlePkt);
+    document.getElementById("btnConnect").textContent = "СВЯЗЬ OK";
+    document.getElementById("btnConnect").style.background = "#10b981";
+  } catch (err) {
+    console.error(err);
+    alert("Ошибка BLE: " + err.message);
+  }
+};
+
+let globalMaxV = -Infinity, globalMinV = Infinity;
+let globalMaxI = -Infinity, globalMinI = Infinity;
+
+function handlePkt(event) {
+  const view = event.target.value;
+  if (view.byteLength < 12) return;
+
+  const v_scale = view.getUint16(0, true);
+  const raw_v_min = view.getInt16(2, true);
+  const raw_v_max = view.getInt16(4, true);
+  const raw_i_min = view.getInt16(6, true);
+  const raw_i_max = view.getInt16(8, true);
+  const counter = view.getUint16(10, true);
+
+  const scaleMode = (v_scale >> 14) & 0x03;
+  let multiplier = 1.0; 
+  if (scaleMode === 1) multiplier = 10.0;
+  if (scaleMode === 2) multiplier = 1000.0;
+
+  const vMin = raw_v_min / 100.0;
+  const vMax = raw_v_max / 100.0;
+  const iMin = (raw_i_min * multiplier) / 1000.0;
+  const iMax = (raw_i_max * multiplier) / 1000.0;
+
+  const vNow = (vMin + vMax) / 2;
+  const iNow = (iMin + iMax) / 2;
+
+    const cellI = document.getElementById("cellI");
+  if (iNow >= 0) { cellI.className = "tablo-cell i-pos"; } else { cellI.className = "tablo-cell i-neg"; }
+
+  // 1. СКОРОСТЬ ОБНОВЛЕНИЯ ЦИФР (4 раза в секунду = каждые 250 мс)
+  // Расчет глобальных экстремумов ловит абсолютно каждый пакет на полной скорости
+  if(vMin < globalMinV) globalMinV = vMin;
+  if(vMax > globalMaxV) globalMaxV = vMax;
+  if(iMin < globalMinI) globalMinI = iMin;
+  if(iMax > globalMaxI) globalMaxI = iMax;
+
+  // Отрисовка больших цифр и текстовых блоков — строго 4 раза в секунду (250 мс)
+  const nowTime = performance.now();
+  if (nowTime - lastDigitUpdateTime >= 250) {
+    document.getElementById("txtV").textContent = vNow.toFixed(2);
+    document.getElementById("txtI").textContent = iNow.toFixed(3);
+    
+    document.getElementById("txtVExtr").textContent = `MIN: ${globalMinV.toFixed(2)}В | MAX: ${globalMaxV.toFixed(2)}В`;
+    document.getElementById("txtIExtr").textContent = `MIN: ${globalMinI.toFixed(2)}А | MAX: ${globalMaxI.toFixed(2)}А`;
+    
+    lastDigitUpdateTime = nowTime;
+  }
+
+  // 2. ПАУЗА ДЛЯ ГРАФИКОВ И ТЕКСТОВОГО ЛОГА
+  // Если пауза нажата — этот блок просто пропускается, сохраняя график неподвижным
+  if (isInterfacePaused) return;
+
+  <!-- Object.keys(charts).forEach(id => { charts[id].push(vMin, vMax, iMin, iMax); }); -->
+  Object.keys(charts).forEach(id => { charts[id].push(vMin, vMax, iMin, iMax, counter); });
+
+  if (isTermActive) {
+    let hexStr = "";
+    for (let i = 0; i < view.byteLength; i++) {
+      let b = view.getUint8(i).toString(16);
+      hexStr += (b.length === 1 ? "0" : "") + b;
+    }
+	const decodedText = `| ${vMin.toFixed(2)}-${vMax.toFixed(2)} | ${iMin.toFixed(2)}..${iMax.toFixed(2)}`;
+    //writeLog(`[Pkt #${counter}] 0x${hexStr.toUpperCase()}`);
+	writeLog(`[Pkt #${counter}] 0x${hexStr.toUpperCase().padEnd(24, ' ')} ${decodedText}`);
+  }
+}
+
+function toggleInterfacePause() {
+  const btn = document.getElementById("btnPause");
+  isInterfacePaused = !isInterfacePaused;
+  if (isInterfacePaused) {
+    btn.textContent = "Продолжить";
+    btn.style.background = "#ef4444"; // Подсвечиваем красным на паузе
+  } else {
+    btn.textContent = "Пауза";
+    btn.style.background = "#27272a"; // Возвращаем обычный цвет
+  }
+}
+
+loadChartStates();
+</script>
+<div id="chart-tooltip" class="chart-tooltip hidden"></div>
 </html>

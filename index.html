@@ -400,7 +400,10 @@ document.getElementById("btnConnect").onclick = async () => {
       optionalServices: ["4fafc201-1fb5-459e-8fcc-c5c9c331914b"]
     });
     const server = await bleDevice.gatt.connect();
+  //  const service = await server.getPrimaryService("4fafc201-1fb5-459e-8fcc-c5c9c331914b");
+  if (server.requestMtu) { await server.requestMtu(100); }
     const service = await server.getPrimaryService("4fafc201-1fb5-459e-8fcc-c5c9c331914b");
+	
     bleChar = await service.getCharacteristic("beb5483e-36e1-4688-b7f5-ea07361b26a8");
     
     await bleChar.startNotifications();
@@ -519,6 +522,26 @@ function toggleInterfacePause() {
 }
 
 loadChartStates();
+let pktCount = 0;
+let lastCheckTime = performance.now();
+
+// Перехватываем управление для замера скорости
+const originalHandlePkt = handlePkt;
+handlePkt = function(event) {
+  pktCount++; // Считаем каждый пришедший BLE пакет
+  
+  let now = performance.now();
+  if (now - lastCheckTime >= 1000) {
+    let hz = pktCount; // Сколько пакетов пришло за секунду
+    let pointsPerSec = hz * 20; // 20 замеров в каждом пакете
+    console.log(`[BLE SPEED] Скорость: ${hz} пак/сек | Данных: ${pointsPerSec} Гц (точек/сек)`);
+    pktCount = 0;
+    lastCheckTime = now;
+  }
+  
+  // Передаем пакет дальше в вашу стандартную отрисовку графиков
+  originalHandlePkt(event);
+};
 </script>
 <div id="chart-tooltip" class="chart-tooltip hidden"></div>
 </html>

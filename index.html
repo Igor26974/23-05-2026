@@ -390,7 +390,7 @@ function updateDemoUI() {
   document.getElementById("btnDemo2").classList.toggle("active", activeDemo === 2);
 }
 
-document.getElementById("btnConnect").onclick = async () => {
+documedocument.getElementById("btnConnect").onclick = async () => {
   try {
     bleDevice = await navigator.bluetooth.requestDevice({
       filters: [
@@ -399,21 +399,36 @@ document.getElementById("btnConnect").onclick = async () => {
       ],
       optionalServices: ["4fafc201-1fb5-459e-8fcc-c5c9c331914b"]
     });
+    
+    console.log("[BLE] Подключение к GATT серверу...");
     const server = await bleDevice.gatt.connect();
     
-    // 🟢 ИСПРАВЛЕНО: Увеличиваем MTU до 512, чтобы браузер принял пакет из 120 точек
-    if (server.requestMtu) { await server.requestMtu(512); } 
+    // Безопасный запрос MTU (если ОС/браузер выдадут ошибку — скрипт не упадет)
+    if (server.requestMtu) { 
+      try {
+        await server.requestMtu(512); 
+        console.log("[BLE] MTU 512 успешно запрошен со стороны браузера");
+      } catch (mtuErr) {
+        console.warn("[BLE] Предупреждение MTU (игнорируем): " + mtuErr.message);
+      }
+    }
     
+    console.log("[BLE] Получение сервиса...");
     const service = await server.getPrimaryService("4fafc201-1fb5-459e-8fcc-c5c9c331914b");
+    
+    console.log("[BLE] Получение характеристики...");
     bleChar = await service.getCharacteristic("beb5483e-36e1-4688-b7f5-ea07361b26a8");
     
+    console.log("[BLE] Запуск уведомлений...");
     await bleChar.startNotifications();
     bleChar.addEventListener('characteristicvaluechanged', handlePkt);
+    
     document.getElementById("btnConnect").textContent = "СВЯЗЬ OK";
     document.getElementById("btnConnect").style.background = "#10b981";
+    console.log("[BLE] Соединение полностью установлено!");
+    
   } catch (err) {
-    console.error(err);
-    // Игнорируем штатную ошибку отмены выбора пользователем, чтобы не спамить алертами
+    console.error("[BLE ERROR]", err);
     if (err.name !== 'NotFoundError') {
       alert("Ошибка BLE: " + err.message);
     }

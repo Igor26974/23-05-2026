@@ -400,10 +400,11 @@ document.getElementById("btnConnect").onclick = async () => {
       optionalServices: ["4fafc201-1fb5-459e-8fcc-c5c9c331914b"]
     });
     const server = await bleDevice.gatt.connect();
-  //  const service = await server.getPrimaryService("4fafc201-1fb5-459e-8fcc-c5c9c331914b");
-  if (server.requestMtu) { await server.requestMtu(100); }
+    
+    // 🟢 ИСПРАВЛЕНО: Увеличиваем MTU до 512, чтобы браузер принял пакет из 120 точек
+    if (server.requestMtu) { await server.requestMtu(512); } 
+    
     const service = await server.getPrimaryService("4fafc201-1fb5-459e-8fcc-c5c9c331914b");
-	
     bleChar = await service.getCharacteristic("beb5483e-36e1-4688-b7f5-ea07361b26a8");
     
     await bleChar.startNotifications();
@@ -412,14 +413,15 @@ document.getElementById("btnConnect").onclick = async () => {
     document.getElementById("btnConnect").style.background = "#10b981";
   } catch (err) {
     console.error(err);
-    alert("Ошибка BLE: " + err.message);
+    // Игнорируем штатную ошибку отмены выбора пользователем, чтобы не спамить алертами
+    if (err.name !== 'NotFoundError') {
+      alert("Ошибка BLE: " + err.message);
+    }
   }
 };
 
 let globalMaxV = -Infinity, globalMinV = Infinity;
 let globalMaxI = -Infinity, globalMinI = Infinity;
-
-
 
 function handlePkt(event) {
   const view = event.target.value;
@@ -452,7 +454,6 @@ function handlePkt(event) {
     if (iPoint < localMinI) localMinI = iPoint;
     if (iPoint > localMaxI) localMaxI = iPoint;
 
-    // Раскомментируйте обратно для секундного графика, когда проверите стабильность
     if (!isInterfacePaused && charts["1s"]) {
        charts["1s"].push(vPoint, vPoint, iPoint, iPoint, counter);
     }
@@ -483,7 +484,6 @@ function handlePkt(event) {
 
   if (isInterfacePaused) return;
 
-  // Раскомментируйте обратно для долгосрочных графиков после успешного теста логов
   Object.keys(charts).forEach(id => {
      if (id !== "1s") {
        charts[id].push(localMinV, localMaxV, localMinI, localMaxI, counter);
@@ -492,7 +492,6 @@ function handlePkt(event) {
 
   if (isTermActive) {
     let hexStr = "";
-    // Выводим чуть больше байт в лог для информативности
     for (let i = 0; i < Math.min(view.byteLength, 20); i++) { 
       let b = view.getUint8(i).toString(16);
       hexStr += (b.length === 1 ? "0" : "") + b;
@@ -507,10 +506,10 @@ function toggleInterfacePause() {
   isInterfacePaused = !isInterfacePaused;
   if (isInterfacePaused) {
     btn.textContent = "Продолжить";
-    btn.style.background = "#ef4444"; // Подсвечиваем красным на паузе
+    btn.style.background = "#ef4444";
   } else {
     btn.textContent = "Пауза";
-    btn.style.background = "#27272a"; // Возвращаем обычный цвет
+    btn.style.background = "#27272a";
   }
 }
 
@@ -518,23 +517,23 @@ loadChartStates();
 let pktCount = 0;
 let lastCheckTime = performance.now();
 
-// Перехватываем управление для замера скорости
 const originalHandlePkt = handlePkt;
 handlePkt = function(event) {
-  pktCount++; // Считаем каждый пришедший BLE пакет
+  pktCount++; 
   
   let now = performance.now();
   if (now - lastCheckTime >= 1000) {
-    let hz = pktCount; // Сколько пакетов пришло за секунду
-    let pointsPerSec = hz * 20; // 20 замеров в каждом пакете
+    let hz = pktCount; 
+    // 🟢 ИСПРАВЛЕНО: Считаем точки на основе реального нового размера пачки (120 точек)
+    let pointsPerSec = hz * 120; 
     console.log(`[BLE SPEED] Скорость: ${hz} пак/сек | Данных: ${pointsPerSec} Гц (точек/сек)`);
     pktCount = 0;
     lastCheckTime = now;
   }
   
-  // Передаем пакет дальше в вашу стандартную отрисовку графиков
   originalHandlePkt(event);
 };
+
 </script>
 <div id="chart-tooltip" class="chart-tooltip hidden"></div>
 </html>

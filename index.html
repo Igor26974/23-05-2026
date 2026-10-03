@@ -1,78 +1,547 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <title>ESP32-C3 BLE Поток данных</title>
-    <style>
-        body { font-family: sans-serif; margin: 20px; }
-        #log { width: 100%; height: 300px; font-family: monospace; }
-        .btn { padding: 10px 20px; font-size: 16px; cursor: pointer; }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BLE VA-Monitor v291130</title>
+<style>
+  :root { --bg: #0b0b0d; --card: #131317; --txt: #e2e8f0; --accent: #2563eb; --red: #ef4444; --blue: #3b82f6; --green: #10b981; }
+  * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, sans-serif; }
+  body { background: var(--bg); color: var(--txt); padding: 15px; padding-top: 5px; }
+  .grid-main { display: grid; grid-template-columns: 1fr; gap: 12px; max-width: 1300px; margin: 0 auto; }
+  .card { background: var(--card); border-radius: 12px; padding: 15px; border: 1px solid #1e1e24; }
+  
+    .sticky-tablo { position: sticky; top: 0; z-index: 9999; background: transparent; padding: 8px 0; border-bottom: none; pointer-events: none; }
+
+  
+  .row-btn { display: flex; gap: 10px; margin-bottom: 5px; flex-wrap: wrap; align-items: center; }
+  .ver-tag { font-family: monospace; font-size: 12px; color: #52525b; margin-left: auto; font-weight: bold; }
+  button { background: #1f1f24; color: white; border: none; padding: 9px 15px; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 13px; transition: 0.15s; }
+  button.active { background: var(--accent); }
+  button.btn-demo { background: #7c2d12; }
+  button.btn-demo.active { background: #ea580c; }
+  
+  .tablo-container { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .tablo-cell { text-align: center; background: transparent !important; padding: 12px; border-radius: 8px; border: none !important; pointer-events: none; }
+
+  .tablo-label { font-size: 13px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tablo-val { font-size: 54px; font-weight: 800; font-family: monospace; line-height: 1.1; margin: 2px 0; }
+  
+  .tablo-cell.v { color: var(--green); }
+  .tablo-cell.i-pos { color: var(--red); }
+  .tablo-cell.i-neg { color: var(--blue); }
+  
+  .tablo-sub { font-size: 14px; color: #71717a; font-family: monospace; font-weight: bold; }
+  .chart-wrapper { position: relative; background: #040406; border-radius: 8px; margin-top: 12px; border: 1px solid #1f1f24; padding: 2px; }
+  canvas { display: block; width: 100%; height: 240px; }
+  .terminal-box { background: #000; border: 1px solid var(--red); border-radius: 6px; padding: 10px; font-family: monospace; font-size: 11px; height: 140px; overflow-y: auto; color: var(--green); margin-top: 12px; }
+  .hidden { display: none !important; }
+  
+  /* Стили для всплывающего окна подсказки */
+  .chart-tooltip {
+    position: absolute;
+    background: rgba(19, 19, 23, 0.95);
+    border: 1px solid #2d2d34;
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-family: monospace;
+    font-size: 12px;
+    color: #e2e8f0;
+    pointer-events: none;
+    z-index: 10000;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    line-height: 1.4;
+  }
+</style>
 </head>
 <body>
-    <h1>Прием данных с ESP32-C3 (Пила)</h1>
-    <button class="btn" id="connectBtn">Подключиться по Bluetooth</button>
-    <p>Скорость: <span id="speed">0</span> Кбайт/с</p>
-    <textarea id="log" readonly></textarea>
+<div class="grid-main">
+  <div class="card">
+    <div class="row-btn">
+      <button id="btnConnect" class="active">Подключить BLE</button>
+      <button id="btnDemo1" class="btn-demo">DEMO 1 (Старое)</button>
+      <button id="btnDemo2" class="btn-demo">DEMO 2 (Новое)</button>
+	  <button id="btnPause" onclick="toggleInterfacePause()" style="background: #27272a;">Пауза</button>
+      <button id="btnTerm">Лог: СКРЫТ</button>
+      <span class="ver-tag">v291130-1h</span>
+    </div>
+  </div>
 
-    <script>
-        const SERVICE_UUID = '4fafc201-1fb5-459e-8fcc-c5c9c331914b';
-        const CHARACTERISTIC_UUID = 'beb5483e-36e1-4688-b7f5-ea07361b26a8';
-        
-        let totalBytes = 0;
-        let lastTime = performance.now();
+  <div class="sticky-tablo">
+    <div class="tablo-container">
+      <div id="cellV" class="tablo-cell v">
+        <div class="tablo-label">Напряжение</div>
+        <div id="txtV" class="tablo-val">0.00</div>
+        <div id="txtVExtr" class="tablo-sub">MIN: 0.00В | MAX: 0.00В</div>
+      </div>
+      <div id="cellI" class="tablo-cell i-pos">
+        <div class="tablo-label">Ток</div>
+        <div id="txtI" class="tablo-val">0.000</div>
+        <div id="txtIExtr" class="tablo-sub">MIN: 0.00А | MAX: 0.00А</div>
+      </div>
+    </div>
+  </div>
 
-        // Считаем скорость передачи раз в секунду
-        setInterval(() => {
-            let now = performance.now();
-            let dt = (now - lastTime) / 1000;
-            let kbps = (totalBytes / 1024) / dt;
-            document.getElementById('speed').innerText = kbps.toFixed(2);
-            totalBytes = 0;
-            lastTime = now;
-        }, 1000);
+  <div class="card">
+    <div class="row-btn">
+      <span style="font-size:13px; color:#71717a; margin-right:5px; font-weight:600;">Графики на экране:</span>
+      <button class="btn-ch" data-id="1s">1 Секунда</button>
+      <button class="btn-ch" data-id="1m">1 Минута</button>
+      <button class="btn-ch" data-id="10m">10 Минут</button>
+      <button class="btn-ch" data-id="1h">1 Час</button>
+    </div>
+    
+    <div id="wrapper-1s" class="chart-wrapper hidden"><canvas id="ch1s"></canvas></div>
+    <div id="wrapper-1m" class="chart-wrapper hidden"><canvas id="ch1m"></canvas></div>
+    <div id="wrapper-10m" class="chart-wrapper hidden"><canvas id="ch10m"></canvas></div>
+    <div id="wrapper-1h" class="chart-wrapper hidden"><canvas id="ch1h"></canvas></div>
+  </div>
 
-        document.getElementById('connectBtn').addEventListener('click', async () => {
-            try {
-                const logTxt = document.getElementById('log');
-                logTxt.value += "Поиск устройства...\n";
+  <div id="termBox" class="terminal-box hidden"></div>
+</div>
 
-                const device = await navigator.bluetooth.requestDevice({
-                    filters: [{ name: 'ESP32C3-Sawtooth' }],
-                    optionalServices: [SERVICE_UUID]
-                });
+<script>
+const CONFIG = {
+  "1s":  { size: 400,  div: 1,   label: "Осциллограмма 1с (400 точек)" },
+  "1m":  { size: 600,  div: 10,  label: "Тренды 1м" },
+  "10m": { size: 600,  div: 100, label: "История 10м" },
+  "1h":  { size: 600,  div: 600, label: "Самописец 1 Час (1 точка / 6 сек)" }
+};
 
-                logTxt.value += `Подключение к ${device.name}...\n`;
-                const server = await device.gatt.connect();
-                
-                logTxt.value += "Получение сервиса...\n";
-                const service = await server.getPrimaryService(SERVICE_UUID);
-                
-                logTxt.value += "Получение характеристики...\n";
-                const characteristic = await service.getCharacteristic(CHARACTERISTIC_UUID);
 
-                logTxt.value += "Подписка на уведомления...\n";
-                await characteristic.startNotifications();
-                
-                characteristic.addEventListener('characteristicvaluechanged', (event) => {
-                    const view = event.target.value; // DataView пакет
-                    totalBytes += view.byteLength;
+class MicroChart {
+  constructor(canvasId, cfg) {
+    this.canvas = document.getElementById(canvasId);
+    this.ctx = this.canvas.getContext('2d');
+    this.cfg = cfg;
+    this.data = []; 
+    this.tickCounter = 0;
+    window.addEventListener('resize', () => this.render());
 
-                    // Парсим бинарный буфер (массив int16)
-                    let samples = [];
-                    for (let i = 0; i < view.byteLength; i += 2) {
-                        samples.push(view.getInt16(i, true)); // true для Little-Endian
-                    }
-                    
-                    // Выводим только первую точку из пачки, чтобы браузер не завис от текста
-                    logTxt.value = `Пакет: ${view.byteLength} байт. Первое значение пилы: ${samples[0]}\n` + logTxt.value.substring(0, 1000);
-                });
+    this.canvas.addEventListener('mousemove', (e) => {
+      if (!isInterfacePaused || this.data.length < 2) return;
+      const r = this.canvas.getBoundingClientRect();
+      const x = e.clientX - r.left;
+      if (x < 80 || x > r.width - 80) return;
+      const idx = Math.round(x - 80);
+      const pt = this.data[idx];
+      if (!pt) return;
+      this.canvas.title = `Pkt: ${pt.pktStr || '?'}\nV: ${pt.vMin.toFixed(2)}..${pt.vMax.toFixed(2)}V\nI: ${pt.iMin.toFixed(3)}..${pt.iMax.toFixed(3)}A`;
+    });
+  }
 
-                logTxt.value += "Успешно подключено! Идет прием данных...\n";
-            } catch (error) {
-                document.getElementById('log').value += `Ошибка: ${error}\n`;
-            }
-        });
-    </script>
-</body>
+  push(vMin, vMax, iMin, iMax, pktNum) {
+    if (!this.acc) {
+      this.acc = { vMin, vMax, iMin, iMax, pktStart: pktNum, pktEnd: pktNum };
+    } else {
+      if (vMin < this.acc.vMin) this.acc.vMin = vMin;
+      if (vMax > this.acc.vMax) this.acc.vMax = vMax;
+      if (iMin < this.acc.iMin) this.acc.iMin = iMin;
+      if (iMax > this.acc.iMax) this.acc.iMax = iMax;
+      this.acc.pktEnd = pktNum;
+    }
+
+    this.tickCounter++;
+    if (this.tickCounter % this.cfg.div === 0) {
+      let maxPoints = this.canvas.parentElement.clientWidth - 160; 
+      if (maxPoints <= 0) maxPoints = this.cfg.size; 
+      
+      while (this.data.length >= maxPoints) this.data.shift();
+      
+      this.data.push({ 
+        vMin: this.acc.vMin, 
+        vMax: this.acc.vMax, 
+        iMin: this.acc.iMin, 
+        iMax: this.acc.iMax,
+        pktStr: this.acc.pktStart === this.acc.pktEnd ? `#${this.acc.pktStart}` : `#${this.acc.pktStart}..${this.acc.pktEnd}`
+      });
+      
+      this.acc = null;
+      this.render();
+    }
+  }
+  
+  render() {
+    const w = this.canvas.width = this.canvas.parentElement.clientWidth;
+    const h = this.canvas.height = 240;
+    const ctx = this.ctx;
+    
+    // Цветовая палитра для Тока (один тон для плюса, один для минуса)
+    const COLOR_LIGHT_RED  = "#f87171"; 
+    const COLOR_LIGHT_BLUE = "#60a5fa"; 
+    
+    ctx.fillStyle = "#040406"; ctx.fillRect(0,0,w,h);
+    
+    // Сетка
+    ctx.strokeStyle = "#16161b"; ctx.lineWidth = 1;
+    for(let i=1; i<4; i++) { let y = (h/4)*i; ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke(); }
+    
+    // Границы Осей
+    const padL = 80, padR = 80;
+    ctx.strokeStyle = "#2d2d34"; 
+    ctx.beginPath(); ctx.moveTo(padL, 0); ctx.lineTo(padL, h); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(w - padR, 0); ctx.lineTo(w - padR, h); ctx.stroke();
+
+    ctx.fillStyle = "#52525b"; ctx.font = "11px monospace";
+    ctx.fillText(this.cfg.label, padL + 10, 18);
+
+    if (this.data.length < 2) return;
+
+    // Расчет экстремумов
+    let lMinI = Infinity, lMaxI = -Infinity;
+    let lMinV = Infinity, lMaxV = -Infinity;
+    for (let i = 0; i < this.data.length; i++) {
+      if (this.data[i].iMin < lMinI) lMinI = this.data[i].iMin;
+      if (this.data[i].iMax > lMaxI) lMaxI = this.data[i].iMax;
+      if (this.data[i].vMin < lMinV) lMinV = this.data[i].vMin;
+      if (this.data[i].vMax > lMaxV) lMaxV = this.data[i].vMax;
+    }
+    if (lMinI === Infinity || lMinI === lMaxI) { lMinI = -1; lMaxI = 1; }
+    if (lMinV === Infinity || lMinV === lMaxV) { lMinV = 10; lMaxV = 15; }
+
+    // 1. ОТРИСОВКА ЛИНИИ НАПРЯЖЕНИЯ (Зеленая)
+    ctx.strokeStyle = "#FFFF00"; //Yellow   //"#10b981"; 
+	ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (let i = 0; i < this.data.length; i++) {
+      const x = padL + i;
+      const vNow = (this.data[i].vMin + this.data[i].vMax) / 2;
+      const yV = h - ((vNow - lMinV) / (lMaxV - lMinV)) * h;
+      if (i === 0) ctx.moveTo(x, yV);
+      else ctx.lineTo(x, yV);
+    }
+    ctx.stroke();
+
+    // 2. ОТРИСОВКА ВЕРТИКАЛЬНЫХ КОРИДОРОВ ПУЛЬСАЦИЙ ТОКА
+    const yZero = h - ((0 - lMinI) / (lMaxI - lMinI)) * h;
+    for (let i = 0; i < this.data.length; i++) {
+      const x = padL + i;
+      const pt = this.data[i];
+      const yMinAmp = h - ((pt.iMin - lMinI) / (lMaxI - lMinI)) * h;
+      const yMaxAmp = h - ((pt.iMax - lMinI) / (lMaxI - lMinI)) * h;
+      
+      ctx.lineWidth = 2.0;
+
+      // Синяя часть коридора (Разряд) - строго ПОД линией нуля (Y >= yZero)
+      if (pt.iMin < 0) {
+        let topPoint = (pt.iMax < 0) ? yMaxAmp : yZero;
+        // Защита: верхняя точка синей линии не может быть выше нуля на экране
+        if (topPoint < yZero) topPoint = yZero; 
+        // Защита: нижняя точка не может быть выше верхней
+        const bottomPoint = Math.max(yMinAmp, yZero);
+
+        if (bottomPoint > topPoint) {
+          ctx.beginPath();
+          ctx.strokeStyle = COLOR_LIGHT_BLUE;
+          ctx.moveTo(x, bottomPoint);
+          ctx.lineTo(x, topPoint);
+          ctx.stroke();
+        }
+      }
+
+      // Красная часть коридора (Заряд) - строго НАД линией нуля (Y <= yZero)
+      if (pt.iMax > 0) {
+        let bottomPoint = (pt.iMin > 0) ? yMinAmp : yZero;
+        // Защита: нижняя точка красной линии не может опускаться ниже нуля на экране
+        if (bottomPoint > yZero) bottomPoint = yZero;
+        // Защита: верхняя точка не может быть ниже нижней
+        const topPoint = Math.min(yMaxAmp, yZero);
+
+        if (bottomPoint > topPoint) {
+          ctx.beginPath();
+          ctx.strokeStyle = COLOR_LIGHT_RED;
+          ctx.moveTo(x, bottomPoint);
+          ctx.lineTo(x, topPoint);
+          ctx.stroke();
+        }
+      }
+    }
+
+    // 3. ОТРИСОВКА ОСНОВНОГО ТРЕНДА ТОКА (Срезаем переходы по линии нуля)
+    ctx.lineWidth = 2;
+    for (let i = 0; i < this.data.length - 1; i++) {
+      const x1 = padL + i;
+      const x2 = padL + i + 1;
+      
+      const iNow1 = (this.data[i].iMin + this.data[i].iMax) / 2;
+      const iNow2 = (this.data[i+1].iMin + this.data[i+1].iMax) / 2;
+      
+      let yI1 = h - ((iNow1 - lMinI) / (lMaxI - lMinI)) * h;
+      let yI2 = h - ((iNow2 - lMinI) / (lMaxI - lMinI)) * h;
+
+      // Анализируем пересечение нуля для каждой линии индивидуально
+      if (iNow1 > 0 && iNow2 > 0) {
+        // Полностью в плюсе
+        ctx.strokeStyle = COLOR_LIGHT_RED;
+        ctx.beginPath(); ctx.moveTo(x1, yI1); ctx.lineTo(x2, yI2); ctx.stroke();
+      } else if (iNow1 <= 0 && iNow2 <= 0) {
+        // Полностью в минусе
+        ctx.strokeStyle = COLOR_LIGHT_BLUE;
+        ctx.beginPath(); ctx.moveTo(x1, yI1); ctx.lineTo(x2, yI2); ctx.stroke();
+      } else {
+        // Линия пересекает ноль между точками x1 и x2. Разделяем её на два цветных отрезка.
+        const xZeroCross = x1 + (x2 - x1) * ((yZero - yI1) / (yI2 - yI1));
+
+        // Рисуем часть до нуля
+        ctx.strokeStyle = (iNow1 > 0) ? COLOR_LIGHT_RED : COLOR_LIGHT_BLUE;
+        ctx.beginPath(); ctx.moveTo(x1, yI1); ctx.lineTo(xZeroCross, yZero); ctx.stroke();
+
+        // Рисуем часть после нуля
+        ctx.strokeStyle = (iNow2 > 0) ? COLOR_LIGHT_RED : COLOR_LIGHT_BLUE;
+        ctx.beginPath(); ctx.moveTo(xZeroCross, yZero); ctx.lineTo(x2, yI2); ctx.stroke();
+      }
+    }
+
+
+    // 4. ОТРИСОВКА ЦВЕТНЫХ ЦИФРОВЫХ ШКАЛ
+    ctx.font = "bold 18px monospace";
+    
+    ctx.fillStyle = "#10b981";
+    ctx.fillText(`${lMaxV.toFixed(2)}V`, 5, 30);
+    ctx.fillText(`${lMinV.toFixed(2)}V`, 5, h - 15);
+
+    ctx.fillStyle = (lMaxI >= 0) ? COLOR_LIGHT_RED : COLOR_LIGHT_BLUE;
+    ctx.fillText(`${lMaxI.toFixed(1)}A`, w - padR + 8, 30);
+    
+    ctx.fillStyle = (lMinI >= 0) ? COLOR_LIGHT_RED : COLOR_LIGHT_BLUE;
+    ctx.fillText(`${lMinI.toFixed(1)}A`, w - padR + 8, h - 15);
+  }
+}
+
+const charts = {};
+Object.keys(CONFIG).forEach(id => { charts[id] = new MicroChart(`ch${id}`, CONFIG[id]); });
+
+</script>
+<script>
+let bleDevice = null;
+let bleChar = null;
+let activeDemo = 0; 
+let isInterfacePaused = false;
+let lastDigitUpdateTime = 0;
+
+const MAX_LOG_LINES = 40;
+const termBox = document.getElementById("termBox");
+let isTermActive = false;
+
+function writeLog(hexStr) {
+  if (!isTermActive) return;
+  const line = document.createElement("div");
+  const ms = new Date().getMilliseconds().toString().padStart(3, '0'); 
+  line.textContent = `[${new Date().toLocaleTimeString()}.${ms}] BLE RX: ${hexStr}`;
+  termBox.appendChild(line);
+  if (termBox.children.length > MAX_LOG_LINES) termBox.removeChild(termBox.firstChild);
+  termBox.scrollTop = termBox.scrollHeight;
+}
+
+document.getElementById("btnTerm").onclick = (e) => {
+  isTermActive = !isTermActive;
+  if(isTermActive) { e.target.textContent = "Лог: АКТИВЕН"; termBox.classList.remove("hidden"); }
+  else { e.target.textContent = "Лог: СКРЫТ"; termBox.classList.add("hidden"); termBox.innerHTML=""; }
+};
+
+function saveChartStates() {
+  const states = {};
+  document.querySelectorAll(".btn-ch").forEach(btn => {
+    states[btn.dataset.id] = btn.classList.contains("active");
+  });
+  localStorage.setItem("va_charts_v5", JSON.stringify(states));
+}
+
+function loadChartStates() {
+  const saved = localStorage.getItem("va_charts_v5");
+  const states = saved ? JSON.parse(saved) : { "1s": true, "10s": true, "1m": false, "10m": false };
+  document.querySelectorAll(".btn-ch").forEach(btn => {
+    const id = btn.dataset.id;
+    if (states[id]) {
+      btn.classList.add("active");
+      document.getElementById(`wrapper-${id}`).classList.remove("hidden");
+    } else {
+      btn.classList.remove("active");
+      document.getElementById(`wrapper-${id}`).classList.add("hidden");
+    }
+  });
+}
+
+document.querySelectorAll(".btn-ch").forEach(btn => {
+  btn.onclick = () => {
+    btn.classList.toggle("active");
+    document.getElementById(`wrapper-${btn.dataset.id}`).classList.toggle("hidden");
+    saveChartStates();
+    // Принудительная перерисовка при смене видимости, чтобы график не ломался
+    if (charts[btn.dataset.id]) charts[btn.dataset.id].render();
+  };
+});
+
+async function sendDemoCmd(cmdByte) {
+  if (!bleChar) return;
+  try { await bleChar.writeValue(new Uint8Array([cmdByte])); } catch(e) { console.error(e); }
+}
+
+document.getElementById("btnDemo1").onclick = async () => {
+  activeDemo = (activeDemo === 1) ? 0 : 1; updateDemoUI(); await sendDemoCmd(activeDemo);
+};
+
+document.getElementById("btnDemo2").onclick = async () => {
+  activeDemo = (activeDemo === 2) ? 0 : 2; updateDemoUI(); await sendDemoCmd(activeDemo);
+};
+
+function updateDemoUI() {
+  document.getElementById("btnDemo1").classList.toggle("active", activeDemo === 1);
+  document.getElementById("btnDemo2").classList.toggle("active", activeDemo === 2);
+}
+
+document.getElementById("btnConnect").onclick = async () => {
+  try {
+    bleDevice = await navigator.bluetooth.requestDevice({
+      filters: [
+        { name: "ESP32-C3_VA_Envelope" },
+        { services: ["4fafc201-1fb5-459e-8fcc-c5c9c331914b"] }
+      ],
+      optionalServices: ["4fafc201-1fb5-459e-8fcc-c5c9c331914b"]
+    });
+    const server = await bleDevice.gatt.connect();
+  //  const service = await server.getPrimaryService("4fafc201-1fb5-459e-8fcc-c5c9c331914b");
+  if (server.requestMtu) { await server.requestMtu(100); }
+    const service = await server.getPrimaryService("4fafc201-1fb5-459e-8fcc-c5c9c331914b");
+	
+    bleChar = await service.getCharacteristic("beb5483e-36e1-4688-b7f5-ea07361b26a8");
+    
+    await bleChar.startNotifications();
+    bleChar.addEventListener('characteristicvaluechanged', handlePkt);
+    document.getElementById("btnConnect").textContent = "СВЯЗЬ OK";
+    document.getElementById("btnConnect").style.background = "#10b981";
+  } catch (err) {
+    console.error(err);
+    alert("Ошибка BLE: " + err.message);
+  }
+};
+
+let globalMaxV = -Infinity, globalMinV = Infinity;
+let globalMaxI = -Infinity, globalMinI = Infinity;
+
+function handlePkt(event) {
+  const view = event.target.value;
+  // Защита: пакет с 20 измерениями должен быть строго 82 байта
+  if (view.byteLength < 82) return;
+
+  // Читаем первые 2 байта — это Little-Endian номер пакета counter
+  const counter = view.getUint16(0, true);
+
+  // Переменные для сбора статистики по пакету (для больших цифр табло)
+  let sumV = 0, sumI = 0;
+  let localMinV = Infinity, localMaxV = -Infinity;
+  let localMinI = Infinity, localMaxI = -Infinity;
+
+  // Цикл по 20 замерам (каждый замер занимает по 4 байта, смещение со 2-го байта)
+  for (let k = 0; k < 20; k++) {
+    const offset = 2 + k * 4;
+
+    // Читаем по очереди V и I конкретного замера (по 2 байта в Little-Endian)
+    const raw_v = view.getInt16(offset, true);
+    const raw_i = view.getInt16(offset + 2, true);
+
+    // Переводим в физические величины (В и А)
+    const vPoint = raw_v / 100.0;
+    const iPoint = raw_i / 1000.0;
+
+    // Накапливаем сумму для вычисления среднего значения за 20 мс
+    sumV += vPoint;
+    sumI += iPoint;
+
+    // Фиксируем экстремумы внутри текущего пакета
+    if (vPoint < localMinV) localMinV = vPoint;
+    if (vPoint > localMaxV) localMaxV = vPoint;
+    if (iPoint < localMinI) localMinI = iPoint;
+    if (iPoint > localMaxI) localMaxI = iPoint;
+
+    // Для секундного графика (осциллографа 1s) пушим ВСЕ 20 замеров отдельно.
+    // Это дает частоту 1000 измерений в секунду и потрясающую детализацию.
+    if (!isInterfacePaused && charts["1s"]) {
+      charts["1s"].push(vPoint, vPoint, iPoint, iPoint, counter);
+    }
+  }
+
+  // Вычисляем средние значения за эти 20 мс для отображения крупных цифр
+  const vNow = sumV / 20;
+  const iNow = sumI / 20;
+
+  // Меняем цвет табло в зависимости от знака среднего тока
+  const cellI = document.getElementById("cellI");
+  if (iNow >= 0) { cellI.className = "tablo-cell i-pos"; } else { cellI.className = "tablo-cell i-neg"; }
+
+  // Обновляем глобальные рекорды (MIN/MAX прибора за всё время)
+  if (localMinV < globalMinV) globalMinV = localMinV;
+  if (localMaxV > globalMaxV) globalMaxV = localMaxV;
+  if (localMinI < globalMinI) globalMinI = localMinI;
+  if (localMaxI > globalMaxI) globalMaxI = localMaxI;
+
+  // Отрисовка больших цифр на табло — строго 4 раза в секунду (250 мс)
+  const nowTime = performance.now();
+  if (nowTime - lastDigitUpdateTime >= 250) {
+    document.getElementById("txtV").textContent = vNow.toFixed(2);
+    document.getElementById("txtI").textContent = iNow.toFixed(3);
+    
+    document.getElementById("txtVExtr").textContent = `MIN: ${globalMinV.toFixed(2)}В | MAX: ${globalMaxV.toFixed(2)}В`;
+    document.getElementById("txtIExtr").textContent = `MIN: ${globalMinI.toFixed(2)}А | MAX: ${globalMaxI.toFixed(2)}А`;
+    
+    lastDigitUpdateTime = nowTime;
+  }
+
+  if (isInterfacePaused) return;
+
+  // Для долгосрочных трендов (1m, 10m, 1h) отправляем только сжатые экстремумы.
+  // Это сохраняет точность самописца и защищает оперативную память от перегрузки.
+  Object.keys(charts).forEach(id => {
+    if (id !== "1s") {
+      charts[id].push(localMinV, localMaxV, localMinI, localMaxI, counter);
+    }
+  });
+
+  // Лог терминала в HTML (выводит только первые 14 байт пакета, чтобы не тормозить страницу)
+  if (isTermActive) {
+    let hexStr = "";
+    for (let i = 0; i < Math.min(view.byteLength, 14); i++) {
+      let b = view.getUint8(i).toString(16);
+      hexStr += (b.length === 1 ? "0" : "") + b;
+    }
+    const decodedText = `| Avg V: ${vNow.toFixed(2)}V | Avg I: ${iNow.toFixed(2)}A`;
+    writeLog(`[Pkt #${counter}] 0x${hexStr.toUpperCase()}... ${decodedText} (${view.byteLength} bytes)`);
+  }
+}
+
+function toggleInterfacePause() {
+  const btn = document.getElementById("btnPause");
+  isInterfacePaused = !isInterfacePaused;
+  if (isInterfacePaused) {
+    btn.textContent = "Продолжить";
+    btn.style.background = "#ef4444"; // Подсвечиваем красным на паузе
+  } else {
+    btn.textContent = "Пауза";
+    btn.style.background = "#27272a"; // Возвращаем обычный цвет
+  }
+}
+
+loadChartStates();
+let pktCount = 0;
+let lastCheckTime = performance.now();
+
+// Перехватываем управление для замера скорости
+const originalHandlePkt = handlePkt;
+handlePkt = function(event) {
+  pktCount++; // Считаем каждый пришедший BLE пакет
+  
+  let now = performance.now();
+  if (now - lastCheckTime >= 1000) {
+    let hz = pktCount; // Сколько пакетов пришло за секунду
+    let pointsPerSec = hz * 20; // 20 замеров в каждом пакете
+    console.log(`[BLE SPEED] Скорость: ${hz} пак/сек | Данных: ${pointsPerSec} Гц (точек/сек)`);
+    pktCount = 0;
+    lastCheckTime = now;
+  }
+  
+  // Передаем пакет дальше в вашу стандартную отрисовку графиков
+  originalHandlePkt(event);
+};
+</script>
+<div id="chart-tooltip" class="chart-tooltip hidden"></div>
 </html>

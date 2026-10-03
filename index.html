@@ -456,9 +456,9 @@ function handlePkt(event) {
 
     // Для секундного графика (осциллографа 1s) пушим ВСЕ 20 замеров отдельно.
     // Это дает частоту 1000 измерений в секунду и потрясающую детализацию.
-    if (!isInterfacePaused && charts["1s"]) {
-      charts["1s"].push(vPoint, vPoint, iPoint, iPoint, counter);
-    }
+//    if (!isInterfacePaused && charts["1s"]) {
+//      charts["1s"].push(vPoint, vPoint, iPoint, iPoint, counter);
+//    }
   }
 
   // Вычисляем средние значения за эти 20 мс для отображения крупных цифр
@@ -491,11 +491,11 @@ function handlePkt(event) {
 
   // Для долгосрочных трендов (1m, 10m, 1h) отправляем только сжатые экстремумы.
   // Это сохраняет точность самописца и защищает оперативную память от перегрузки.
-  Object.keys(charts).forEach(id => {
-    if (id !== "1s") {
-      charts[id].push(localMinV, localMaxV, localMinI, localMaxI, counter);
-    }
-  });
+ // Object.keys(charts).forEach(id => {
+ //   if (id !== "1s") {
+ //     charts[id].push(localMinV, localMaxV, localMinI, localMaxI, counter);
+ //   }
+ // });
 
   // Лог терминала в HTML (выводит только первые 14 байт пакета, чтобы не тормозить страницу)
   if (isTermActive) {

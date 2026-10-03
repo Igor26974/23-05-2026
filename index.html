@@ -390,7 +390,7 @@ function updateDemoUI() {
   document.getElementById("btnDemo2").classList.toggle("active", activeDemo === 2);
 }
 
-documedocument.getElementById("btnConnect").onclick = async () => {
+document.getElementById("btnConnect").onclick = async () => {
   try {
     bleDevice = await navigator.bluetooth.requestDevice({
       filters: [

@@ -419,7 +419,7 @@ document.getElementById("btnConnect").onclick = async () => {
 let globalMaxV = -Infinity, globalMinV = Infinity;
 let globalMaxI = -Infinity, globalMinI = Infinity;
 
-function handlePkt(event) {
+<!-- function handlePkt(event) {
   const view = event.target.value;
   // Защита: пакет с 20 измерениями должен быть строго 82 байта
   if (view.byteLength < 82) return;
@@ -508,7 +508,89 @@ function handlePkt(event) {
     writeLog(`[Pkt #${counter}] 0x${hexStr.toUpperCase()}... ${decodedText} (${view.byteLength} bytes)`);
   }
 }
+ -->
 
+function handlePkt(event) {
+  const view = event.target.value;
+  // Защита: новый пакет должен быть строго 482 байта (2 байта счетчик + 120 точек * 4 байта)
+  if (view.byteLength < 482) return; 
+
+  const counter = view.getUint16(0, true);
+
+  let sumV = 0, sumI = 0;
+  let localMinV = Infinity, localMaxV = -Infinity;
+  let localMinI = Infinity, localMaxI = -Infinity;
+
+  // Динамически вычисляем сколько точек прилетело в пакете
+  const pointsInPacket = (view.byteLength - 2) / 4; 
+
+  for (let k = 0; k < pointsInPacket; k++) {
+    const offset = 2 + k * 4;
+
+    const raw_v = view.getInt16(offset, true);
+    const raw_i = view.getInt16(offset + 2, true);
+
+    const vPoint = raw_v / 100.0;
+    const iPoint = raw_i / 1000.0;
+
+    sumV += vPoint;
+    sumI += iPoint;
+
+    if (vPoint < localMinV) localMinV = vPoint;
+    if (vPoint > localMaxV) localMaxV = vPoint;
+    if (iPoint < localMinI) localMinI = iPoint;
+    if (iPoint > localMaxI) localMaxI = iPoint;
+
+    // Раскомментируйте обратно для секундного графика, когда проверите стабильность
+    if (!isInterfacePaused && charts["1s"]) {
+       charts["1s"].push(vPoint, vPoint, iPoint, iPoint, counter);
+    }
+  }
+
+  // Среднее значение теперь делим на реальное количество точек в пакете (на 120)
+  const vNow = sumV / pointsInPacket;
+  const iNow = sumI / pointsInPacket;
+
+  const cellI = document.getElementById("cellI");
+  if (iNow >= 0) { cellI.className = "tablo-cell i-pos"; } else { cellI.className = "tablo-cell i-neg"; }
+
+  if (localMinV < globalMinV) globalMinV = localMinV;
+  if (localMaxV > globalMaxV) globalMaxV = localMaxV;
+  if (localMinI < globalMinI) globalMinI = globalMinI;
+  if (localMaxI > globalMaxI) globalMaxI = localMaxI;
+
+  const nowTime = performance.now();
+  if (nowTime - lastDigitUpdateTime >= 250) {
+    document.getElementById("txtV").textContent = vNow.toFixed(2);
+    document.getElementById("txtI").textContent = iNow.toFixed(3);
+    
+    document.getElementById("txtVExtr").textContent = `MIN: ${globalMinV.toFixed(2)}В | MAX: ${globalMaxV.toFixed(2)}В`;
+    document.getElementById("txtIExtr").textContent = `MIN: ${globalMinI.toFixed(2)}А | MAX: ${globalMaxI.toFixed(2)}А`;
+    
+    lastDigitUpdateTime = nowTime;
+  }
+
+  if (isInterfacePaused) return;
+
+  // Раскомментируйте обратно для долгосрочных графиков после успешного теста логов
+  Object.keys(charts).forEach(id => {
+     if (id !== "1s") {
+       charts[id].push(localMinV, localMaxV, localMinI, localMaxI, counter);
+     }
+  });
+
+  if (isTermActive) {
+    let hexStr = "";
+    // Выводим чуть больше байт в лог для информативности
+    for (let i = 0; i < Math.min(view.byteLength, 20); i++) { 
+      let b = view.getUint8(i).toString(16);
+      hexStr += (b.length === 1 ? "0" : "") + b;
+    }
+    const decodedText = `| Avg V: ${vNow.toFixed(2)}V | Avg I: ${iNow.toFixed(2)}A | Points: ${pointsInPacket}`;
+    writeLog(`[Pkt #${counter}] 0x${hexStr.toUpperCase()}... ${decodedText} (${view.byteLength} bytes)`);
+  }
+} 
+ 
 function toggleInterfacePause() {
   const btn = document.getElementById("btnPause");
   isInterfacePaused = !isInterfacePaused;

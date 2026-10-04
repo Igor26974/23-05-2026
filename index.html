@@ -122,8 +122,8 @@ class MicroChart {
       if (!isInterfacePaused || this.data.length < 2) return;
       const r = this.canvas.getBoundingClientRect();
       const x = e.clientX - r.left;
-      if (x < 80 || x > r.width - 80) return;
-      const idx = Math.round(x - 80);
+      if (x < 0 || x > r.width) return;	//if (x < 80 || x > r.width - 80) return;
+      const idx = Math.round(x);	//const idx = Math.round(x - 80);
       const pt = this.data[idx];
       if (!pt) return;
       this.canvas.title = `Pkt: ${pt.pktStr || '?'}\nV: ${pt.vMin.toFixed(2)}..${pt.vMax.toFixed(2)}V\nI: ${pt.iMin.toFixed(3)}..${pt.iMax.toFixed(3)}A`;
@@ -143,7 +143,7 @@ class MicroChart {
 
     this.tickCounter++;
     if (this.tickCounter % this.cfg.div === 0) {
-      let maxPoints = this.canvas.parentElement.clientWidth - 160; 
+      let maxPoints = this.canvas.parentElement.clientWidth ; 
       if (maxPoints <= 0) maxPoints = this.cfg.size; 
       
       while (this.data.length >= maxPoints) this.data.shift();
@@ -161,7 +161,7 @@ class MicroChart {
     }
   }
   
-  render() {
+ /* render() {
     const w = this.canvas.width = this.canvas.parentElement.clientWidth;
     const h = this.canvas.height = 240;
     const ctx = this.ctx;
@@ -305,7 +305,131 @@ class MicroChart {
     
     ctx.fillStyle = (lMinI >= 0) ? COLOR_LIGHT_RED : COLOR_LIGHT_BLUE;
     ctx.fillText(`${lMinI.toFixed(1)}A`, w - padR + 8, h - 15);
+  }*/
+  render() {
+    const w = this.canvas.width = this.canvas.parentElement.clientWidth;
+    const h = this.canvas.height = 240;
+    const ctx = this.ctx;
+    
+    const COLOR_LIGHT_RED  = "#f87171"; 
+    const COLOR_LIGHT_BLUE = "#60a5fa"; 
+    
+    ctx.fillStyle = "#040406"; ctx.fillRect(0,0,w,h);
+    
+    // Сетка на весь экран
+    ctx.strokeStyle = "#16161b"; ctx.lineWidth = 1;
+    for(let i=1; i<4; i++) { let y = (h/4)*i; ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke(); }
+    
+    // 🟢 ИСПРАВЛЕНО: Границы осей смещены к самым краям экрана (0 и w)
+    ctx.strokeStyle = "#2d2d34"; 
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, h); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(w, 0); ctx.lineTo(w, h); ctx.stroke();
+
+    ctx.fillStyle = "#52525b"; ctx.font = "11px monospace";
+    ctx.fillText(this.cfg.label, 10, 18);
+
+    if (this.data.length < 2) return;
+
+    // Расчет экстремумов
+    let lMinI = Infinity, lMaxI = -Infinity;
+    let lMinV = Infinity, lMaxV = -Infinity;
+    for (let i = 0; i < this.data.length; i++) {
+      if (this.data[i].iMin < lMinI) lMinI = this.data[i].iMin;
+      if (this.data[i].iMax > lMaxI) lMaxI = this.data[i].iMax;
+      if (this.data[i].vMin < lMinV) lMinV = this.data[i].vMin;
+      if (this.data[i].vMax > lMaxV) lMaxV = this.data[i].vMax;
+    }
+    if (lMinI === Infinity || lMinI === lMaxI) { lMinI = -1; lMaxI = 1; }
+    if (lMinV === Infinity || lMinV === lMaxV) { lMinV = 10; lMaxV = 15; }
+
+    // 1. ОТРИСОВКА ЛИНИИ НАПРЯЖЕНИЯ (Желтая от края до края)
+    ctx.strokeStyle = "#FFFF00"; 
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (let i = 0; i < this.data.length; i++) {
+      const x = i; // 🟢 Без отступа padL
+      const vNow = (this.data[i].vMin + this.data[i].vMax) / 2;
+      const yV = h - ((vNow - lMinV) / (lMaxV - lMinV)) * h;
+      if (i === 0) ctx.moveTo(x, yV);
+      else ctx.lineTo(x, yV);
+    }
+    ctx.stroke();
+
+    // 2. ОТРИСОВКА ВЕРТИКАЛЬНЫХ КОРИДОРОВ ПУЛЬСАЦИЙ ТОКА
+    const yZero = h - ((0 - lMinI) / (lMaxI - lMinI)) * h;
+    for (let i = 0; i < this.data.length; i++) {
+      const x = i; // 🟢 Без отступа padL
+      const pt = this.data[i];
+      const yMinAmp = h - ((pt.iMin - lMinI) / (lMaxI - lMinI)) * h;
+      const yMaxAmp = h - ((pt.iMax - lMinI) / (lMaxI - lMinI)) * h;
+      
+      ctx.lineWidth = 2.0;
+
+      if (pt.iMin < 0) {
+        let topPoint = (pt.iMax < 0) ? yMaxAmp : yZero;
+        if (topPoint < yZero) topPoint = yZero; 
+        const bottomPoint = Math.max(yMinAmp, yZero);
+        if (bottomPoint > topPoint) {
+          ctx.beginPath(); ctx.strokeStyle = COLOR_LIGHT_BLUE;
+          ctx.moveTo(x, bottomPoint); ctx.lineTo(x, topPoint); ctx.stroke();
+        }
+      }
+
+      if (pt.iMax > 0) {
+        let bottomPoint = (pt.iMin > 0) ? yMinAmp : yZero;
+        if (bottomPoint > yZero) bottomPoint = yZero;
+        const topPoint = Math.min(yMaxAmp, yZero);
+        if (bottomPoint > topPoint) {
+          ctx.beginPath(); ctx.strokeStyle = COLOR_LIGHT_RED;
+          ctx.moveTo(x, bottomPoint); ctx.lineTo(x, topPoint); ctx.stroke();
+        }
+      }
+    }
+
+    // 3. ОТРИСОВКА ОСНОВНОГО ТРЕНДА ТОКА
+    ctx.lineWidth = 2;
+    for (let i = 0; i < this.data.length - 1; i++) {
+      const x1 = i;
+      const x2 = i + 1;
+      
+      const iNow1 = (this.data[i].iMin + this.data[i].iMax) / 2;
+      const iNow2 = (this.data[i+1].iMin + this.data[i+1].iMax) / 2;
+      
+      let yI1 = h - ((iNow1 - lMinI) / (lMaxI - lMinI)) * h;
+      let yI2 = h - ((iNow2 - lMinI) / (lMaxI - lMinI)) * h;
+
+      if (iNow1 > 0 && iNow2 > 0) {
+        ctx.strokeStyle = COLOR_LIGHT_RED;
+        ctx.beginPath(); ctx.moveTo(x1, yI1); ctx.lineTo(x2, yI2); ctx.stroke();
+      } else if (iNow1 <= 0 && iNow2 <= 0) {
+        ctx.strokeStyle = COLOR_LIGHT_BLUE;
+        ctx.beginPath(); ctx.moveTo(x1, yI1); ctx.lineTo(x2, yI2); ctx.stroke();
+      } else {
+        const xZeroCross = x1 + (x2 - x1) * ((yZero - yI1) / (yI2 - yI1));
+        ctx.strokeStyle = (iNow1 > 0) ? COLOR_LIGHT_RED : COLOR_LIGHT_BLUE;
+        ctx.beginPath(); ctx.moveTo(x1, yI1); ctx.lineTo(xZeroCross, yZero); ctx.stroke();
+        ctx.strokeStyle = (iNow2 > 0) ? COLOR_LIGHT_RED : COLOR_LIGHT_BLUE;
+        ctx.beginPath(); ctx.moveTo(xZeroCross, yZero); ctx.lineTo(x2, yI2); ctx.stroke();
+      }
+    }
+
+    // 4. 🟢 ИСПРАВЛЕНО: ОТРИСОВКА ЦВЕТНЫХ ЦИФРОВЫХ ШКАЛ СВЕРХУ ГРАФИКА (Прозрачный фон)
+    ctx.font = "bold 15px monospace";
+    
+    // Напряжение (Слева вверху и слева внизу)
+    ctx.fillStyle = "rgba(4, 4, 6, 0.65)"; ctx.fillRect(4, 25, 75, 20); ctx.fillRect(4, h - 30, 75, 20);
+    ctx.fillStyle = "#10b981";
+    ctx.fillText(`${lMaxV.toFixed(2)}V`, 6, 40);
+    ctx.fillText(`${lMinV.toFixed(2)}V`, 6, h - 15);
+
+    // Ток (Справа вверху и справа внизу)
+    ctx.fillStyle = "rgba(4, 4, 6, 0.65)"; ctx.fillRect(w - 75, 25, 71, 20); ctx.fillRect(w - 75, h - 30, 71, 20);
+    ctx.fillStyle = (lMaxI >= 0) ? COLOR_LIGHT_RED : COLOR_LIGHT_BLUE;
+    ctx.fillText(`${lMaxI.toFixed(1)}A`, w - 70, 40);
+    ctx.fillStyle = (lMinI >= 0) ? COLOR_LIGHT_RED : COLOR_LIGHT_BLUE;
+    ctx.fillText(`${lMinI.toFixed(1)}A`, w - 70, h - 15);
   }
+  
 }
 
 const charts = {};

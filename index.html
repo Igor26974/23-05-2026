@@ -375,7 +375,7 @@ document.getElementById("btnConnect").onclick = async () => {
 let globalMaxV = -Infinity, globalMinV = Infinity;
 let globalMaxI = -Infinity, globalMinI = Infinity;
 
-/* function handlePkt(event) { 
+/*function handlePkt(event) {
   const view = event.target.value;
   // 🟢 ЗАЩИТА: Ждем пакет строго на 120 точек (482 байта)
   if (view.byteLength < 482) return;
@@ -405,7 +405,44 @@ let globalMaxI = -Infinity, globalMinI = Infinity;
     if (!isInterfacePaused && charts["1s"]) {
       charts["1s"].push(vPoint, vPoint, iPoint, iPoint, counter);
     }
-  }*/
+  }
+
+  const vNow = sumV / pointsInPacket;
+  const iNow = sumI / pointsInPacket;
+
+  const cellI = document.getElementById("cellI");
+  if (iNow >= 0) { cellI.className = "tablo-cell i-pos"; } else { cellI.className = "tablo-cell i-neg"; }
+
+  if (localMinV < globalMinV) globalMinV = localMinV;
+  if (localMaxV > globalMaxV) globalMaxV = localMaxV;
+  if (localMinI < globalMinI) globalMinI = globalMinI;
+  if (localMaxI > globalMaxI) globalMaxI = localMaxI;
+
+  const nowTime = performance.now();
+  if (nowTime - lastDigitUpdateTime >= 250) {
+    document.getElementById("txtV").textContent = vNow.toFixed(2);
+    document.getElementById("txtI").textContent = iNow.toFixed(3);
+    document.getElementById("txtVExtr").textContent = `MIN: ${globalMinV.toFixed(2)}В | MAX: ${globalMaxV.toFixed(2)}В`;
+    document.getElementById("txtIExtr").textContent = `MIN: ${globalMinI.toFixed(2)}А | MAX: ${globalMaxI.toFixed(2)}А`;
+    lastDigitUpdateTime = nowTime;
+  }
+
+  if (isInterfacePaused) return;
+
+  Object.keys(charts).forEach(id => {
+    if (id !== "1s") charts[id].push(localMinV, localMaxV, localMinI, localMaxI, counter);
+  });
+
+  if (isTermActive) {
+    let hexStr = "";
+    for (let i = 0; i < Math.min(view.byteLength, 14); i++) {
+      let b = view.getUint8(i).toString(16); hexStr += (b.length === 1 ? "0" : "") + b;
+    }
+    const decodedText = `| Avg V: ${vNow.toFixed(2)}V | Avg I: ${iNow.toFixed(2)}A`;
+    writeLog(`[Pkt #${counter}] 0x${hexStr.toUpperCase()}... ${decodedText} (${view.byteLength} bytes)`);
+  }
+}*/
+
 // 🟢 ПОЛНОСТЬЮ ЗАМЕНИТЬ ФУНКЦИЮ handlePkt НА ЭТУ ОПТИМИЗИРОВАННУЮ ВЕРСИЮ:
 function handlePkt(event) {
   const view = event.target.value;
@@ -478,42 +515,6 @@ function handlePkt(event) {
   }
 }
 
-
-  const vNow = sumV / pointsInPacket;
-  const iNow = sumI / pointsInPacket;
-
-  const cellI = document.getElementById("cellI");
-  if (iNow >= 0) { cellI.className = "tablo-cell i-pos"; } else { cellI.className = "tablo-cell i-neg"; }
-
-  if (localMinV < globalMinV) globalMinV = localMinV;
-  if (localMaxV > globalMaxV) globalMaxV = localMaxV;
-  if (localMinI < globalMinI) globalMinI = globalMinI;
-  if (localMaxI > globalMaxI) globalMaxI = localMaxI;
-
-  const nowTime = performance.now();
-  if (nowTime - lastDigitUpdateTime >= 250) {
-    document.getElementById("txtV").textContent = vNow.toFixed(2);
-    document.getElementById("txtI").textContent = iNow.toFixed(3);
-    document.getElementById("txtVExtr").textContent = `MIN: ${globalMinV.toFixed(2)}В | MAX: ${globalMaxV.toFixed(2)}В`;
-    document.getElementById("txtIExtr").textContent = `MIN: ${globalMinI.toFixed(2)}А | MAX: ${globalMaxI.toFixed(2)}А`;
-    lastDigitUpdateTime = nowTime;
-  }
-
-  if (isInterfacePaused) return;
-
-  Object.keys(charts).forEach(id => {
-    if (id !== "1s") charts[id].push(localMinV, localMaxV, localMinI, localMaxI, counter);
-  });
-
-  if (isTermActive) {
-    let hexStr = "";
-    for (let i = 0; i < Math.min(view.byteLength, 14); i++) {
-      let b = view.getUint8(i).toString(16); hexStr += (b.length === 1 ? "0" : "") + b;
-    }
-    const decodedText = `| Avg V: ${vNow.toFixed(2)}V | Avg I: ${iNow.toFixed(2)}A`;
-    writeLog(`[Pkt #${counter}] 0x${hexStr.toUpperCase()}... ${decodedText} (${view.byteLength} bytes)`);
-  }
-}
 
 function toggleInterfacePause() {
   const btn = document.getElementById("btnPause");

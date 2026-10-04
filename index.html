@@ -63,7 +63,7 @@
       <button id="btnDemo2" class="btn-demo">DEMO 2 (Новое)</button>
 	  
       <button id="btnTerm">Лог: СКРЫТ</button>
-      <span class="ver-tag">v 04.10 16:14-1h</span>
+      <span class="ver-tag">v 04.10 16:17-1h</span>
     </div>
   </div>
 
@@ -157,7 +157,7 @@ class MicroChart {
         vMax: this.acc.vMax, 
         iMin: this.acc.iMin, 
         iMax: this.acc.iMax,
-        pktStr: this.acc.pktStart === this.acc.pktEnd ? `#${this.acc.pktStart}` : `#${this.acc.pktStart}..${this.acc.pktEnd}`
+        pktStr: this.acc.pktStart === this.acc.pktEnd ? `#${this.acc.pktStart}` : `#${this.acc.pktStart}..${this.acc.pktEnd}`,
 		time: new Date() // 🟢 Сохраняем точное время приема этой точки
       });
       

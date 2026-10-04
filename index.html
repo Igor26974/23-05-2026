@@ -21,7 +21,7 @@
   button.btn-demo { background: #7c2d12; }
   button.btn-demo.active { background: #ea580c; }
   
-  .tablo-container { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+	.tablo-container { display: grid; grid-template-columns: 1fr auto 1fr; gap: 12px; }
     .tablo-cell { text-align: center; background: transparent !important; padding: 12px; border-radius: 8px; border: none !important; pointer-events: none; }
 
   .tablo-label { font-size: 13px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; }
@@ -61,7 +61,7 @@
       <button id="btnConnect" class="active">Подключить BLE</button>
       <button id="btnDemo1" class="btn-demo">DEMO 1 (Старое)</button>
       <button id="btnDemo2" class="btn-demo">DEMO 2 (Новое)</button>
-	  <button id="btnPause" onclick="toggleInterfacePause()" style="background: #27272a;">Пауза</button>
+	  
       <button id="btnTerm">Лог: СКРЫТ</button>
       <span class="ver-tag">v 04.10 14:28-1h</span>
     </div>
@@ -74,6 +74,10 @@
         <div id="txtV" class="tablo-val">0.00</div>
         <div id="txtVExtr" class="tablo-sub">MIN: 0.00В | MAX: 0.00В</div>
       </div>
+ <!-- Кнопка Пауза строго по центру липкого табло -->
+      <div style="text-align: center; pointer-events: auto; z-index: 10001;">
+        <button id="btnPause" onclick="toggleInterfacePause()" style="background: #27272a; padding: 12px 18px; font-size: 14px; box-shadow: 0 4px 10px rgba(0,0,0,0.4);">Пауза</button>
+      </div>	  
       <div id="cellI" class="tablo-cell i-pos">
         <div class="tablo-label">Ток</div>
         <div id="txtI" class="tablo-val">0.000</div>
@@ -420,14 +424,14 @@ class MicroChart {
     ctx.fillStyle = "rgba(4, 4, 6, 0.65)"; ctx.fillRect(4, 25, 75, 20); ctx.fillRect(4, h - 30, 75, 20);
     ctx.fillStyle = "#10b981";
     ctx.fillText(`${lMaxV.toFixed(2)}V`, 6, 40);
-    ctx.fillText(`${lMinV.toFixed(2)}V`, 6, h - 15);
+   // ctx.fillText(`${lMinV.toFixed(2)}V`, 6, h - 15);
 
     // Ток (Справа вверху и справа внизу)
     ctx.fillStyle = "rgba(4, 4, 6, 0.65)"; ctx.fillRect(w - 75, 25, 71, 20); ctx.fillRect(w - 75, h - 30, 71, 20);
     ctx.fillStyle = (lMaxI >= 0) ? COLOR_LIGHT_RED : COLOR_LIGHT_BLUE;
     ctx.fillText(`${lMaxI.toFixed(1)}A`, w - 70, 40);
     ctx.fillStyle = (lMinI >= 0) ? COLOR_LIGHT_RED : COLOR_LIGHT_BLUE;
-    ctx.fillText(`${lMinI.toFixed(1)}A`, w - 70, h - 15);
+    c//tx.fillText(`${lMinI.toFixed(1)}A`, w - 70, h - 15);
   }
   
 }

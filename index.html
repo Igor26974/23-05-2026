@@ -63,7 +63,7 @@
       <button id="btnDemo2" class="btn-demo">DEMO 2 (Новое)</button>
 	  
       <button id="btnTerm">Лог: СКРЫТ</button>
-      <span class="ver-tag">v 04.10 16:17-1h</span>
+      <span id="txtFileDate" class="ver-tag"></span>
     </div>
   </div>
 
@@ -105,11 +105,17 @@
 </div>
 
 <script>
-const CONFIG = {
+/*const CONFIG = {
   "1s":  { size: 400,  div: 1,   label: "Осциллограмма 1с (400 точек)" },
   "1m":  { size: 600,  div: 10,  label: "Тренды 1м" },
   "10m": { size: 600,  div: 100, label: "История 10м" },
   "1h":  { size: 600,  div: 600, label: "Самописец 1 Час (1 точка / 6 сек)" }
+}; */
+const CONFIG = {
+  "1s":  { size: 400,  div: 1,   label: "Осциллограмма 1с (1000 Гц)" },
+  "1m":  { size: 600,  div: 8,   label: "Тренды 1м (1 точка / ~1 сек)" },
+  "10m": { size: 600,  div: 80,  label: "История 10м (1 точка / ~10 сек)" }, // 🟢 Исправлено строго в 10 раз больше 1m
+  "1h":  { size: 600,  div: 480, label: "Самописец 1 Час (1 точка / ~1 мин)" }  // 🟢 Исправлено строго в 6 раз больше 10m
 };
 
 
@@ -434,42 +440,50 @@ class MicroChart {
     ctx.fillStyle = (lMinI >= 0) ? COLOR_LIGHT_RED : COLOR_LIGHT_BLUE;
     ctx.fillText(`${lMinI.toFixed(1)}A`, w - 70, h - 15);
     // 🟢 ДОБАВИТЬ: ОТРИСОВКА МЕТОК ВРЕМЕНИ ВНИЗУ ГРАФИКА
-    // 🟢 ПОЛНОСТЬЮ ЗАМЕНИТЬ БЛОК ОТРИСОВКИ МЕТОК ВРЕМЕНИ НА ЭТОТ ВАРИАНТ:
-    ctx.font = "10px monospace";
+ctx.font = "10px monospace";
     ctx.fillStyle = "#71717a"; 
+    ctx.textAlign = "center";
     
-    const labelPositions = [0.05, 0.35, 0.65, 0.95]; 
-    
-    labelPositions.forEach(pos => {
-      const idx = Math.floor(this.data.length * pos);
-      const pt = this.data[idx];
-      if (pt && pt.time) {
-        let timeStr = "";
-        
-        // 🟢 ИСПРАВЛЕНО: Правильная проверка id графика из конфигурации класса (через this.cfg, а не id)
-        if (this.ctx.canvas.id === "ch1s") {
-          const secs = pt.time.getSeconds().toString().padStart(2, '0');
-          const ms = Math.floor(pt.time.getMilliseconds() / 100).toString();
-          timeStr = `${secs}.${ms}s`;
-        } else {
-          // Для 1m, 10m и 1h выводим нормальное системное время ЧЧ:ММ:СС
-          const hrs = pt.time.getHours().toString().padStart(2, '0');
-          const mins = pt.time.getMinutes().toString().padStart(2, '0');
-          const scs = pt.time.getSeconds().toString().padStart(2, '0');
-          timeStr = `${hrs}:${mins}:${scs}`;
+    // Выводим максимум 4 метки времени, привязанные строго к реальным точкам на графике
+    const totalPoints = this.data.length;
+    if (totalPoints >= 2) {
+      // Рассчитываем шаги по массиву в зависимости от того, сколько точек накопилось
+      const indices = [
+        0, 
+        Math.floor(totalPoints * 0.33), 
+        Math.floor(totalPoints * 0.66), 
+        totalPoints - 1
+      ];
+
+      indices.forEach(idx => {
+        const pt = this.data[idx];
+        if (pt && pt.time) {
+          let timeStr = "";
+          
+          if (this.ctx.canvas.id === "ch1s") {
+            const secs = pt.time.getSeconds().toString().padStart(2, '0');
+            const ms = Math.floor(pt.time.getMilliseconds() / 100).toString();
+            timeStr = `${secs}.${ms}s`;
+          } else {
+            const hrs = pt.time.getHours().toString().padStart(2, '0');
+            const mins = pt.time.getMinutes().toString().padStart(2, '0');
+            const scs = pt.time.getSeconds().toString().padStart(2, '0');
+            timeStr = `${hrs}:${mins}:${scs}`;
+          }
+          
+          // 🟢 ИСПРАВЛЕНО: Координата X метки теперь строго равна координате X самой точки на графике
+          const xPos = idx; 
+          
+          // Предотвращаем выход текста за левый и правый края холста
+          let finalX = xPos;
+          if (finalX < 25) finalX = 25;
+          if (finalX > w - 25) finalX = w - 25;
+
+          ctx.fillText(timeStr, finalX, h - 4);
         }
-        
-        const xPos = w * pos;
-        
-        // 🟢 ИСПРАВЛЕНО: Убрана заливка черного прямоугольника (фон 100% прозрачный)
-        
-        // 🟢 ИСПРАВЛЕНО: Текст смещен вниз на полторы высоты символа (было h - 19, стало h - 4)
-        ctx.fillStyle = "#71717a";
-        ctx.textAlign = "center";
-        ctx.fillText(timeStr, xPos, h - 4);
-      }
-    });
-    ctx.textAlign = "left";
+      });
+    }
+    ctx.textAlign = "left"; // Возвращаем стандартное выравнивание
   }
 
   
@@ -715,6 +729,16 @@ handlePkt = function(event) {
   
   originalHandlePkt(event);
 };
+
+// Автоматический вывод даты изменения файла в формате: ММ.ДД ЧЧ:ММ
+const lastMod = new Date(document.lastModified);
+if (!isNaN(lastMod.getTime())) {
+  const mm = (lastMod.getMonth() + 1).toString().padStart(2, '0');
+  const dd = lastMod.getDate().toString().padStart(2, '0');
+  const hh = lastMod.getHours().toString().padStart(2, '0');
+  const min = lastMod.getMinutes().toString().padStart(2, '0');
+  document.getElementById("txtFileDate").textContent = `v ${mm}.${dd} ${hh}:${min}-1h`;
+}
 
 </script>
 <div id="chart-tooltip" class="chart-tooltip hidden"></div>

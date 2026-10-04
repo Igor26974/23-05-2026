@@ -63,7 +63,7 @@
       <button id="btnDemo2" class="btn-demo">DEMO 2 (Новое)</button>
 	  
       <button id="btnTerm">Лог: СКРЫТ</button>
-      <span class="ver-tag">v 04.10 15:17-1h</span>
+      <span class="ver-tag">v 04.10 15:29-1h</span>
     </div>
   </div>
 
@@ -421,17 +421,17 @@ class MicroChart {
     ctx.font = "bold 15px monospace";
     
     // Напряжение (Слева вверху и слева внизу)
-    ctx.fillStyle = "rgba(4, 4, 6, 0.65)"; ctx.fillRect(4, 25, 75, 20); ctx.fillRect(4, h - 30, 75, 20);
+    ctx.fillStyle = "rgba(4, 4, 6, 0.65)"; //ctx.fillRect(4, 25, 75, 20); ctx.fillRect(4, h - 30, 75, 20);
     ctx.fillStyle = "#10b981";
     ctx.fillText(`${lMaxV.toFixed(2)}V`, 6, 40);
-   // ctx.fillText(`${lMinV.toFixed(2)}V`, 6, h - 15);
+    ctx.fillText(`${lMinV.toFixed(2)}V`, 6, h - 15);
 
     // Ток (Справа вверху и справа внизу)
-    ctx.fillStyle = "rgba(4, 4, 6, 0.65)"; ctx.fillRect(w - 75, 25, 71, 20); ctx.fillRect(w - 75, h - 30, 71, 20);
+    ctx.fillStyle = "rgba(4, 4, 6, 0.65)"; //ctx.fillRect(w - 75, 25, 71, 20); ctx.fillRect(w - 75, h - 30, 71, 20);
     ctx.fillStyle = (lMaxI >= 0) ? COLOR_LIGHT_RED : COLOR_LIGHT_BLUE;
     ctx.fillText(`${lMaxI.toFixed(1)}A`, w - 70, 40);
     ctx.fillStyle = (lMinI >= 0) ? COLOR_LIGHT_RED : COLOR_LIGHT_BLUE;
-    c//tx.fillText(`${lMinI.toFixed(1)}A`, w - 70, h - 15);
+    ctx.fillText(`${lMinI.toFixed(1)}A`, w - 70, h - 15);
   }
   
 }

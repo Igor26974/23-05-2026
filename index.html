@@ -444,18 +444,20 @@ ctx.font = "10px monospace";
     ctx.fillStyle = "#71717a"; 
     ctx.textAlign = "center";
     
-    // Выводим максимум 4 метки времени, привязанные строго к реальным точкам на графике
+    // 1. Фиксируем 4 экранные точки для временных меток (в начале, на 1/3, на 2/3 и в конце экрана)
+    const labelPositions = [0.05, 0.35, 0.65, 0.95]; 
     const totalPoints = this.data.length;
-    if (totalPoints >= 2) {
-      // Рассчитываем шаги по массиву в зависимости от того, сколько точек накопилось
-      const indices = [
-        0, 
-        Math.floor(totalPoints * 0.33), 
-        Math.floor(totalPoints * 0.66), 
-        totalPoints - 1
-      ];
 
-      indices.forEach(idx => {
+    labelPositions.forEach(pos => {
+      // 2. Вычисляем координату X на экране для этой метки
+      const xPos = w * pos;
+
+      // 3. Вычисляем, какой индекс в массиве данных ДОЛЖЕН соответствовать этой экранной точке
+      const idx = Math.floor(totalPoints * pos);
+
+      // 4. ПРОВЕРКА: Рисуем время ТОЛЬКО если график физически дорисовал до этой координаты X
+      // Если данных еще мало, пустые отметки справа не будут накладываться друг на друга
+      if (idx < totalPoints) {
         const pt = this.data[idx];
         if (pt && pt.time) {
           let timeStr = "";
@@ -471,9 +473,6 @@ ctx.font = "10px monospace";
             timeStr = `${hrs}:${mins}:${scs}`;
           }
           
-          // 🟢 ИСПРАВЛЕНО: Координата X метки теперь строго равна координате X самой точки на графике
-          const xPos = idx; 
-          
           // Предотвращаем выход текста за левый и правый края холста
           let finalX = xPos;
           if (finalX < 25) finalX = 25;
@@ -481,9 +480,9 @@ ctx.font = "10px monospace";
 
           ctx.fillText(timeStr, finalX, h - 4);
         }
-      });
-    }
-    ctx.textAlign = "left"; // Возвращаем стандартное выравнивание
+      }
+    });
+    ctx.textAlign = "left";
   }
 
   

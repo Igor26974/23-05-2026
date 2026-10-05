@@ -607,7 +607,12 @@ document.getElementById("btnConnect").onclick = async () => {
     document.getElementById("btnConnect").textContent = "СВЯЗЬ OK";
     document.getElementById("btnConnect").style.background = "#10b981";
     console.log("[BLE] Соединение полностью установлено!");
-    
+
+	if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+      document.documentElement.requestFullscreen().then(() => {
+        document.getElementById("btnFullscreen").textContent = "❌ Выход";
+      }).catch(e => console.warn("Fullscreen auto-trigger ignored by browser: " + e.message));
+    }  
   } catch (err) {
     console.error("[BLE ERROR]", err);
     if (err.name !== 'NotFoundError') {

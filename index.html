@@ -61,7 +61,8 @@
       <button id="btnConnect" class="active">Подключить BLE</button>
       <button id="btnDemo1" class="btn-demo">DEMO 1 (Старое)</button>
       <button id="btnDemo2" class="btn-demo">DEMO 2 (Новое)</button>
-	  
+	  <button id="btnFullscreen" onclick="toggleFullscreen()" style="background: #27272a;">🖥️ Экран</button>
+		
       <button id="btnTerm">Лог: СКРЫТ</button>
       <span id="txtFileDate" class="ver-tag"></span>
     </div>
@@ -739,6 +740,19 @@ if (!isNaN(lastMod.getTime())) {
   document.getElementById("txtFileDate").textContent = `v ${mm}.${dd} ${hh}:${min}-1h`;
 }
 
+function toggleFullscreen() {
+  if (!document.fullscreenElement) {
+    document.documentElement.requestFullscreen().then(() => {
+      document.getElementById("btnFullscreen").textContent = "❌ Выход";
+    }).catch(err => {
+      console.error(`Ошибка полноэкранного режима: ${err.message}`);
+    });
+  } else {
+    document.exitFullscreen();
+    document.getElementById("btnFullscreen").textContent = "🖥️ Экран";
+  }
+}
+	
 </script>
 <div id="chart-tooltip" class="chart-tooltip hidden"></div>
 </html>
